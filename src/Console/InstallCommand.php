@@ -11,9 +11,10 @@ final class InstallCommand extends Command
 {
     protected $signature = 'instruckt:install
         {--skip-mcp : Skip automatic MCP configuration}
-        {--skip-skill : Skip installing the agent skill}';
+        {--skip-skill : Skip installing the agent skill}
+        {--skip-toolbar : Skip injecting the toolbar into layouts}';
 
-    protected $description = 'Install instruckt — publish config, run migrations, publish assets, configure agents';
+    protected $description = 'Install instruckt — publish config, run migrations, configure agents, inject toolbar';
 
     /** @var array<string, array{name: string, mcp_path: string, mcp_key: string, skill_path: string, config: callable}> */
     private array $agents = [];
@@ -22,12 +23,21 @@ final class InstallCommand extends Command
     {
         $this->registerAgents();
 
-        $this->info('Installing instruckt...');
+        $this->components->info('Installing instruckt...');
+        $this->newLine();
 
         $this->call('vendor:publish', ['--tag' => 'instruckt-config', '--force' => false]);
         $this->call('vendor:publish', ['--tag' => 'instruckt-migrations', '--force' => false]);
         $this->call('vendor:publish', ['--tag' => 'instruckt-assets', '--force' => true]);
         $this->call('migrate', ['--force' => false]);
+
+        $framework = $this->detectFramework();
+        $this->newLine();
+        $this->components->twoColumnDetail('Detected framework', $framework);
+
+        if (! $this->option('skip-toolbar')) {
+            $this->injectToolbar($framework);
+        }
 
         $detected = $this->detectAgents();
 
@@ -42,12 +52,181 @@ final class InstallCommand extends Command
         $this->newLine();
         $this->components->info('instruckt installed successfully.');
         $this->newLine();
-        $this->line('  Add the toolbar to your layout:');
-        $this->line('  <code>&lt;x-instruckt-toolbar /&gt;</code>');
-        $this->newLine();
 
         return self::SUCCESS;
     }
+
+    // ── Framework detection ──────────────────────────────────────
+
+    private function detectFramework(): string
+    {
+        // Check composer.json/lock for PHP frameworks
+        if ($this->hasComposerPackage('livewire/livewire')) {
+            return 'livewire';
+        }
+
+        // Check package.json for JS frameworks
+        $packageJson = $this->getPackageJson();
+
+        if ($packageJson) {
+            $deps = array_merge(
+                $packageJson['dependencies'] ?? [],
+                $packageJson['devDependencies'] ?? [],
+            );
+
+            if (isset($deps['vue']) || isset($deps['@vitejs/plugin-vue'])) {
+                return 'vue';
+            }
+
+            if (isset($deps['react']) || isset($deps['@vitejs/plugin-react'])) {
+                return 'react';
+            }
+
+            if (isset($deps['svelte']) || isset($deps['@sveltejs/vite-plugin-svelte'])) {
+                return 'svelte';
+            }
+        }
+
+        // Fallback — plain Blade
+        return 'blade';
+    }
+
+    private function hasComposerPackage(string $package): bool
+    {
+        $lockPath = base_path('composer.lock');
+
+        if (! File::exists($lockPath)) {
+            return false;
+        }
+
+        $lock = json_decode(File::get($lockPath), true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return false;
+        }
+
+        $packages = array_merge($lock['packages'] ?? [], $lock['packages-dev'] ?? []);
+
+        foreach ($packages as $pkg) {
+            if (($pkg['name'] ?? '') === $package) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function getPackageJson(): ?array
+    {
+        $path = base_path('package.json');
+
+        if (! File::exists($path)) {
+            return null;
+        }
+
+        $data = json_decode(File::get($path), true);
+
+        return json_last_error() === JSON_ERROR_NONE ? $data : null;
+    }
+
+    // ── Toolbar injection ────────────────────────────────────────
+
+    private function injectToolbar(string $framework): void
+    {
+        $adapters = match ($framework) {
+            'livewire' => "['livewire']",
+            'vue' => "['vue']",
+            'react' => "['react']",
+            'svelte' => "['svelte']",
+            default => "['livewire']",
+        };
+
+        $tag = "<x-instruckt-toolbar :adapters=\"{$adapters}\" />";
+        $layouts = $this->findLayoutFiles();
+
+        if (empty($layouts)) {
+            $this->components->warn('No layout files found. Add this before </body> in your layout:');
+            $this->line("  {$tag}");
+
+            return;
+        }
+
+        $injected = false;
+
+        foreach ($layouts as $layout) {
+            $relative = str_replace(base_path().'/', '', $layout);
+            $contents = File::get($layout);
+
+            // Already has instruckt toolbar
+            if (str_contains($contents, 'instruckt-toolbar') || str_contains($contents, 'x-instruckt')) {
+                $this->line("  {$relative} — already has toolbar");
+
+                continue;
+            }
+
+            // Find </body> and inject before it
+            if (! str_contains($contents, '</body>')) {
+                continue;
+            }
+
+            // Detect indentation of the </body> tag
+            if (preg_match('/^([ \t]*)<\/body>/m', $contents, $matches)) {
+                $indent = $matches[1];
+                $replacement = "{$indent}    {$tag}\n{$indent}</body>";
+                $contents = preg_replace('/^([ \t]*)<\/body>/m', $replacement, $contents, 1);
+            } else {
+                $contents = str_replace('</body>', "    {$tag}\n</body>", $contents);
+            }
+
+            File::put($layout, $contents);
+            $this->components->info("Injected toolbar into {$relative}");
+            $injected = true;
+        }
+
+        if (! $injected && ! empty($layouts)) {
+            $this->components->warn('Could not inject toolbar automatically. Add this before </body>:');
+            $this->line("  {$tag}");
+        }
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function findLayoutFiles(): array
+    {
+        $layouts = [];
+        $searchPaths = [
+            resource_path('views/layouts'),
+            resource_path('views/components/layouts'),
+            resource_path('views'),
+        ];
+
+        $layoutNames = [
+            'app.blade.php',
+            'guest.blade.php',
+            'base.blade.php',
+            'layout.blade.php',
+            'main.blade.php',
+        ];
+
+        foreach ($searchPaths as $dir) {
+            if (! File::isDirectory($dir)) {
+                continue;
+            }
+
+            foreach ($layoutNames as $name) {
+                $path = $dir.'/'.$name;
+
+                if (File::exists($path) && str_contains(File::get($path), '</body>')) {
+                    $layouts[] = $path;
+                }
+            }
+        }
+
+        return array_unique($layouts);
+    }
+
+    // ── Agent detection & MCP config ─────────────────────────────
 
     private function registerAgents(): void
     {
@@ -110,41 +289,33 @@ final class InstallCommand extends Command
     }
 
     /**
-     * Detect which agents have project-level config present.
-     *
      * @return array<string, array{name: string, mcp_path: string, mcp_key: string, skill_path: string, config: callable}>
      */
     private function detectAgents(): array
     {
         $detected = [];
 
-        // Claude Code: .mcp.json or .claude/ or CLAUDE.md
         if (File::exists(base_path('.mcp.json')) || File::isDirectory(base_path('.claude')) || File::exists(base_path('CLAUDE.md'))) {
             $detected['claude_code'] = $this->agents['claude_code'];
         }
 
-        // Cursor: .cursor/
         if (File::isDirectory(base_path('.cursor'))) {
             $detected['cursor'] = $this->agents['cursor'];
         }
 
-        // Codex: .codex/ or AGENTS.md
         if (File::isDirectory(base_path('.codex')) || File::exists(base_path('.codex/config.toml'))) {
             $detected['codex'] = $this->agents['codex'];
         }
 
-        // OpenCode: opencode.json
         if (File::exists(base_path('opencode.json'))) {
             $detected['opencode'] = $this->agents['opencode'];
         }
 
-        // Copilot: .vscode/
         if (File::isDirectory(base_path('.vscode'))) {
             $detected['copilot'] = $this->agents['copilot'];
         }
 
         if (empty($detected)) {
-            // Default to Claude Code if nothing detected
             $detected['claude_code'] = $this->agents['claude_code'];
         }
 
@@ -157,7 +328,6 @@ final class InstallCommand extends Command
     private function configureMcpForAgents(array $agents): void
     {
         foreach ($agents as $key => $agent) {
-            // Skip TOML-based configs (Codex) — we can't reliably write TOML
             if (str_ends_with($agent['mcp_path'], '.toml')) {
                 $this->line("  Codex detected — add instruckt manually to .codex/config.toml");
 
@@ -213,7 +383,6 @@ final class InstallCommand extends Command
             return;
         }
 
-        // Deduplicate skill paths (e.g. codex and opencode both use .agents/skills)
         $installed = [];
 
         foreach ($agents as $agent) {
