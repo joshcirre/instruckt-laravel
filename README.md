@@ -13,14 +13,14 @@ Your users annotate elements in the browser. Your AI agent (Claude Code, Cursor,
 ## Install
 
 ```bash
-composer require joshcirre/instruckt-laravel
+composer require joshcirre/instruckt-laravel --dev
 ```
 
 ```bash
 php artisan instruckt:install
 ```
 
-This publishes the config, runs migrations, and copies the JS assets.
+This publishes the config, runs migrations, copies the JS assets, and automatically configures MCP for any detected AI agents (Claude Code, Cursor, Codex, OpenCode, GitHub Copilot).
 
 ## Setup
 
@@ -34,12 +34,15 @@ That's it. The component loads the JS and initializes instruckt with sensible de
 
 ### Connect Your AI Agent
 
-Add the MCP server to your agent's config. For Claude Code (`.mcp.json`):
+The install command automatically detects your AI agent and configures MCP. If you need to do it manually, add to `.mcp.json` (Claude Code):
 
 ```json
 {
-  "instruckt": {
-    "url": "http://localhost:8000/mcp"
+  "mcpServers": {
+    "instruckt": {
+      "command": "php",
+      "args": ["artisan", "mcp:serve", "instruckt"]
+    }
   }
 }
 ```
