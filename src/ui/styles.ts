@@ -18,9 +18,9 @@ export const TOOLBAR_CSS = /* css */ `
 :host-context([data-instruckt-theme="dark"]),
 @media (prefers-color-scheme: dark) {
   :host {
-    --ik-bg: #1c1c1e; --ik-bg2: #2c2c2e; --ik-border: #3a3a3c;
+    --ik-bg: #1c1c1e; --ik-bg2: #2c2c2e; --ik-border: #38383a;
     --ik-text: #f4f4f5; --ik-muted: #a1a1aa;
-    --ik-shadow: 0 4px 24px rgba(0,0,0,.5);
+    --ik-shadow: 0 8px 32px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.06);
   }
 }
 
@@ -28,22 +28,21 @@ export const TOOLBAR_CSS = /* css */ `
   --ik-accent: #6366f1;
   --ik-accent-h: #4f46e5;
   --ik-bg: #ffffff;
-  --ik-bg2: #f8f8f8;
+  --ik-bg2: #f4f4f5;
   --ik-border: #e4e4e7;
   --ik-text: #18181b;
-  --ik-muted: #71717a;
-  --ik-shadow: 0 4px 24px rgba(0,0,0,.12);
+  --ik-muted: #a1a1aa;
+  --ik-shadow: 0 8px 32px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.04);
 }
 
 .toolbar {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   background: var(--ik-bg);
-  border: 1px solid var(--ik-border);
-  border-radius: 14px;
-  padding: 8px 6px;
+  border-radius: 12px;
+  padding: 6px;
   box-shadow: var(--ik-shadow);
   user-select: none;
   touch-action: none;
@@ -56,35 +55,36 @@ export const TOOLBAR_CSS = /* css */ `
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
   border: none;
   background: transparent;
   color: var(--ik-muted);
   cursor: pointer;
   padding: 0;
-  font-size: 17px;
-  line-height: 1;
   position: relative;
-  transition: background .1s, color .1s;
+  transition: background .15s ease, color .15s ease;
 }
+.btn svg { display: block; }
 .btn:hover { background: var(--ik-bg2); color: var(--ik-text); }
 .btn.active { background: var(--ik-accent); color: #fff; }
 .btn.active:hover { background: var(--ik-accent-h); }
 
-.divider { width: 20px; height: 1px; background: var(--ik-border); margin: 2px 0; }
+.divider { width: 18px; height: 1px; background: var(--ik-border); margin: 3px 0; }
 
 .badge {
   position: absolute;
-  top: -4px; right: -4px;
+  top: -3px; right: -3px;
   min-width: 16px; height: 16px;
-  background: var(--ik-accent);
+  background: #ef4444;
   color: #fff;
   border-radius: 8px;
-  font-size: 10px; font-weight: 700;
+  font-size: 10px; font-weight: 600;
   display: flex; align-items: center; justify-content: center;
-  padding: 0 3px;
+  padding: 0 4px;
+  line-height: 1;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 `
 

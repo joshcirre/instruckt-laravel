@@ -153,9 +153,9 @@ var TOOLBAR_CSS = (
 :host-context([data-instruckt-theme="dark"]),
 @media (prefers-color-scheme: dark) {
   :host {
-    --ik-bg: #1c1c1e; --ik-bg2: #2c2c2e; --ik-border: #3a3a3c;
+    --ik-bg: #1c1c1e; --ik-bg2: #2c2c2e; --ik-border: #38383a;
     --ik-text: #f4f4f5; --ik-muted: #a1a1aa;
-    --ik-shadow: 0 4px 24px rgba(0,0,0,.5);
+    --ik-shadow: 0 8px 32px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.06);
   }
 }
 
@@ -163,22 +163,21 @@ var TOOLBAR_CSS = (
   --ik-accent: #6366f1;
   --ik-accent-h: #4f46e5;
   --ik-bg: #ffffff;
-  --ik-bg2: #f8f8f8;
+  --ik-bg2: #f4f4f5;
   --ik-border: #e4e4e7;
   --ik-text: #18181b;
-  --ik-muted: #71717a;
-  --ik-shadow: 0 4px 24px rgba(0,0,0,.12);
+  --ik-muted: #a1a1aa;
+  --ik-shadow: 0 8px 32px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.04);
 }
 
 .toolbar {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   background: var(--ik-bg);
-  border: 1px solid var(--ik-border);
-  border-radius: 14px;
-  padding: 8px 6px;
+  border-radius: 12px;
+  padding: 6px;
   box-shadow: var(--ik-shadow);
   user-select: none;
   touch-action: none;
@@ -191,35 +190,36 @@ var TOOLBAR_CSS = (
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
   border: none;
   background: transparent;
   color: var(--ik-muted);
   cursor: pointer;
   padding: 0;
-  font-size: 17px;
-  line-height: 1;
   position: relative;
-  transition: background .1s, color .1s;
+  transition: background .15s ease, color .15s ease;
 }
+.btn svg { display: block; }
 .btn:hover { background: var(--ik-bg2); color: var(--ik-text); }
 .btn.active { background: var(--ik-accent); color: #fff; }
 .btn.active:hover { background: var(--ik-accent-h); }
 
-.divider { width: 20px; height: 1px; background: var(--ik-border); margin: 2px 0; }
+.divider { width: 18px; height: 1px; background: var(--ik-border); margin: 3px 0; }
 
 .badge {
   position: absolute;
-  top: -4px; right: -4px;
+  top: -3px; right: -3px;
   min-width: 16px; height: 16px;
-  background: var(--ik-accent);
+  background: #ef4444;
   color: #fff;
   border-radius: 8px;
-  font-size: 10px; font-weight: 700;
+  font-size: 10px; font-weight: 600;
   display: flex; align-items: center; justify-content: center;
-  padding: 0 3px;
+  padding: 0 4px;
+  line-height: 1;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 `
 );
@@ -398,6 +398,12 @@ function injectGlobalStyles() {
 }
 
 // src/ui/toolbar.ts
+var ICONS = {
+  annotate: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>`,
+  freeze: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`,
+  copy: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+  check: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
+};
 var Toolbar = class {
   constructor(position, callbacks) {
     this.position = position;
@@ -417,21 +423,21 @@ var Toolbar = class {
     this.shadow.appendChild(style);
     const toolbar = document.createElement("div");
     toolbar.className = "toolbar";
-    this.annotateBtn = this.makeBtn("\u270F\uFE0F", "Annotate elements (A)", () => {
+    this.annotateBtn = this.makeBtn(ICONS.annotate, "Annotate elements (A)", () => {
       const next = this.mode !== "annotating";
       this.setMode(next ? "annotating" : "idle");
       this.callbacks.onToggleAnnotate(next);
     });
-    this.freezeBtn = this.makeBtn("\u23F8", "Freeze animations (F)", () => {
+    this.freezeBtn = this.makeBtn(ICONS.freeze, "Freeze animations (F)", () => {
       const next = this.mode !== "frozen";
       this.setMode(next ? "frozen" : "idle");
       this.callbacks.onFreezeAnimations(next);
     });
-    this.copyBtn = this.makeBtn("\u{1F4CB}", "Copy annotations as markdown", () => {
+    this.copyBtn = this.makeBtn(ICONS.copy, "Copy annotations as markdown", () => {
       this.callbacks.onCopy();
-      this.copyBtn.textContent = "\u2713";
+      this.copyBtn.innerHTML = ICONS.check;
       setTimeout(() => {
-        this.copyBtn.textContent = "\u{1F4CB}";
+        this.copyBtn.innerHTML = ICONS.copy;
       }, 1200);
     });
     const divider = document.createElement("div");
@@ -443,12 +449,12 @@ var Toolbar = class {
     this.applyPosition();
     document.body.appendChild(this.host);
   }
-  makeBtn(icon, title, onClick) {
+  makeBtn(iconHtml, title, onClick) {
     const btn = document.createElement("button");
     btn.className = "btn";
     btn.title = title;
     btn.setAttribute("aria-label", title);
-    btn.textContent = icon;
+    btn.innerHTML = iconHtml;
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       onClick();
