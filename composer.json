@@ -1,0 +1,26 @@
+{
+  "name": "joshcirre/instruckt-laravel",
+  "description": "Visual feedback for AI coding agents — Laravel MCP package",
+  "keywords": ["laravel", "livewire", "mcp", "ai", "agent", "feedback", "instruckt"],
+  "license": "MIT",
+  "require": {
+    "php": "^8.2",
+    "laravel/framework": "^11.0|^12.0",
+    "laravel/mcp": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Instruckt\\Laravel\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Instruckt\\Laravel\\InstrucktServiceProvider"
+      ]
+    }
+  },
+  "config": {
+    "sort-packages": true
+  }
+}
