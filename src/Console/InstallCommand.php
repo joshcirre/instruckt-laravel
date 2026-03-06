@@ -260,7 +260,10 @@ final class InstallCommand extends Command
 
     private function injectBladeToolbar(string $framework): void
     {
-        $tag = '<x-instruckt-toolbar />';
+        $usePersist = $framework === 'livewire';
+        $tag = $usePersist
+            ? "@persist('instruckt')\n            <x-instruckt-toolbar />\n        @endpersist"
+            : '<x-instruckt-toolbar />';
         $layouts = $this->findLayoutFiles();
 
         if (empty($layouts)) {
@@ -288,7 +291,9 @@ final class InstallCommand extends Command
 
             if (preg_match('/^([ \t]*)<\/body>/m', $contents, $matches)) {
                 $indent = $matches[1];
-                $replacement = "{$indent}    {$tag}\n{$indent}</body>";
+                $lines = explode("\n", $tag);
+                $indented = array_map(fn ($line) => $line !== '' ? $indent.'    '.$line : $line, $lines);
+                $replacement = implode("\n", $indented)."\n{$indent}</body>";
                 $contents = preg_replace('/^([ \t]*)<\/body>/m', $replacement, $contents, 1);
             } else {
                 $contents = str_replace('</body>', "    {$tag}\n</body>", $contents);

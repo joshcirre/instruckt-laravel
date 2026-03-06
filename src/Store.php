@@ -5,59 +5,43 @@ declare(strict_types=1);
 namespace Instruckt\Laravel;
 
 use Illuminate\Support\Str;
-use PDO;
 
 final class Store
 {
-    private static ?PDO $pdo = null;
-
-    private static function db(): PDO
+    private static function path(): string
     {
-        if (self::$pdo === null) {
-            $path = base_path('instruckt.sqlite');
-            $isNew = ! file_exists($path);
-
-            self::$pdo = new PDO("sqlite:{$path}", null, null, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]);
-
-            self::$pdo->exec('PRAGMA journal_mode=WAL');
-
-            if ($isNew) {
-                self::migrate();
-            }
-        }
-
-        return self::$pdo;
+        return base_path('_instruckt/annotations.json');
     }
 
-    private static function migrate(): void
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private static function readAll(): array
     {
-        self::$pdo->exec(<<<'SQL'
-            CREATE TABLE IF NOT EXISTS annotations (
-                id TEXT PRIMARY KEY,
-                url TEXT NOT NULL,
-                x REAL NOT NULL DEFAULT 0,
-                y REAL NOT NULL DEFAULT 0,
-                comment TEXT NOT NULL,
-                element TEXT NOT NULL DEFAULT '',
-                element_path TEXT DEFAULT '',
-                css_classes TEXT,
-                nearby_text TEXT,
-                selected_text TEXT,
-                bounding_box TEXT,
-                intent TEXT NOT NULL DEFAULT 'fix',
-                severity TEXT NOT NULL DEFAULT 'important',
-                status TEXT NOT NULL DEFAULT 'pending',
-                framework TEXT,
-                thread TEXT NOT NULL DEFAULT '[]',
-                resolved_by TEXT,
-                resolved_at TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-        SQL);
+        $path = self::path();
+
+        if (! file_exists($path)) {
+            return [];
+        }
+
+        $data = json_decode(file_get_contents($path), true);
+
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $annotations
+     */
+    private static function writeAll(array $annotations): void
+    {
+        $path = self::path();
+        $dir = dirname($path);
+
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        file_put_contents($path, json_encode(array_values($annotations), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n", LOCK_EX);
     }
 
     public static function createAnnotation(array $data): array
@@ -65,16 +49,7 @@ final class Store
         $id = (string) Str::ulid();
         $now = now()->toIso8601String();
 
-        $stmt = self::db()->prepare(<<<'SQL'
-            INSERT INTO annotations (id, url, x, y, comment, element, element_path, css_classes,
-                nearby_text, selected_text, bounding_box, intent, severity, status, framework,
-                thread, resolved_by, resolved_at, created_at, updated_at)
-            VALUES (:id, :url, :x, :y, :comment, :element, :element_path, :css_classes,
-                :nearby_text, :selected_text, :bounding_box, :intent, :severity, 'pending', :framework,
-                '[]', NULL, NULL, :created_at, :updated_at)
-        SQL);
-
-        $stmt->execute([
+        $annotation = [
             'id' => $id,
             'url' => $data['url'] ?? '',
             'x' => (float) ($data['x'] ?? 0),
@@ -85,24 +60,34 @@ final class Store
             'css_classes' => $data['css_classes'] ?? null,
             'nearby_text' => $data['nearby_text'] ?? null,
             'selected_text' => $data['selected_text'] ?? null,
-            'bounding_box' => isset($data['bounding_box']) ? json_encode($data['bounding_box']) : null,
+            'bounding_box' => $data['bounding_box'] ?? null,
             'intent' => $data['intent'] ?? 'fix',
             'severity' => $data['severity'] ?? 'important',
-            'framework' => isset($data['framework']) ? json_encode($data['framework']) : null,
+            'status' => 'pending',
+            'framework' => $data['framework'] ?? null,
+            'thread' => [],
+            'resolved_by' => null,
+            'resolved_at' => null,
             'created_at' => $now,
             'updated_at' => $now,
-        ]);
+        ];
 
-        return self::getAnnotationOrFail($id);
+        $all = self::readAll();
+        $all[] = $annotation;
+        self::writeAll($all);
+
+        return $annotation;
     }
 
     public static function getAnnotation(string $id): ?array
     {
-        $stmt = self::db()->prepare('SELECT * FROM annotations WHERE id = :id');
-        $stmt->execute(['id' => $id]);
-        $row = $stmt->fetch();
+        foreach (self::readAll() as $annotation) {
+            if ($annotation['id'] === $id) {
+                return $annotation;
+            }
+        }
 
-        return $row ? self::hydrate($row) : null;
+        return null;
     }
 
     public static function getAnnotationOrFail(string $id): array
@@ -118,75 +103,74 @@ final class Store
 
     public static function updateAnnotation(string $id, array $data): array
     {
-        self::getAnnotationOrFail($id);
-
+        $all = self::readAll();
+        $found = false;
         $allowed = ['status', 'comment', 'resolved_by', 'resolved_at', 'thread'];
-        $sets = [];
-        $params = ['id' => $id, 'updated_at' => now()->toIso8601String()];
 
-        foreach ($data as $key => $value) {
-            if (! in_array($key, $allowed, true)) {
+        foreach ($all as &$annotation) {
+            if ($annotation['id'] !== $id) {
                 continue;
             }
 
-            if ($key === 'thread') {
-                $value = json_encode($value);
+            foreach ($data as $key => $value) {
+                if (in_array($key, $allowed, true)) {
+                    $annotation[$key] = $value;
+                }
             }
 
-            $sets[] = "{$key} = :{$key}";
-            $params[$key] = $value;
+            $annotation['updated_at'] = now()->toIso8601String();
+            $found = true;
+            $updated = $annotation;
+
+            break;
+        }
+        unset($annotation);
+
+        if (! $found) {
+            abort(404, 'Annotation not found.');
         }
 
-        $sets[] = 'updated_at = :updated_at';
+        self::writeAll($all);
 
-        if (! empty($sets)) {
-            $sql = 'UPDATE annotations SET ' . implode(', ', $sets) . ' WHERE id = :id';
-            self::db()->prepare($sql)->execute($params);
-        }
-
-        return self::getAnnotationOrFail($id);
+        return $updated;
     }
 
     public static function addThreadMessage(string $annotationId, string $role, string $content): array
     {
-        $annotation = self::getAnnotationOrFail($annotationId);
+        $all = self::readAll();
 
-        $thread = $annotation['thread'] ?? [];
-        $thread[] = [
-            'id' => (string) Str::ulid(),
-            'role' => $role,
-            'content' => $content,
-            'timestamp' => now()->toIso8601String(),
-        ];
+        foreach ($all as &$annotation) {
+            if ($annotation['id'] !== $annotationId) {
+                continue;
+            }
 
-        return self::updateAnnotation($annotationId, ['thread' => $thread]);
+            $annotation['thread'][] = [
+                'id' => (string) Str::ulid(),
+                'role' => $role,
+                'content' => $content,
+                'timestamp' => now()->toIso8601String(),
+            ];
+
+            $annotation['updated_at'] = now()->toIso8601String();
+            self::writeAll($all);
+
+            return $annotation;
+        }
+        unset($annotation);
+
+        abort(404, 'Annotation not found.');
     }
 
     public static function allAnnotations(): array
     {
-        $rows = self::db()->query('SELECT * FROM annotations ORDER BY created_at ASC')->fetchAll();
-
-        return array_map([self::class, 'hydrate'], $rows);
+        return self::readAll();
     }
 
     public static function getPendingAnnotations(): array
     {
-        $stmt = self::db()->prepare(
-            "SELECT * FROM annotations WHERE status IN ('pending', 'acknowledged') ORDER BY created_at ASC"
-        );
-        $stmt->execute();
-
-        return array_map([self::class, 'hydrate'], $stmt->fetchAll());
-    }
-
-    private static function hydrate(array $row): array
-    {
-        $row['x'] = (float) $row['x'];
-        $row['y'] = (float) $row['y'];
-        $row['bounding_box'] = $row['bounding_box'] ? json_decode($row['bounding_box'], true) : null;
-        $row['framework'] = $row['framework'] ? json_decode($row['framework'], true) : null;
-        $row['thread'] = json_decode($row['thread'] ?? '[]', true);
-
-        return $row;
+        return array_values(array_filter(
+            self::readAll(),
+            fn (array $a) => in_array($a['status'], ['pending', 'acknowledged'], true),
+        ));
     }
 }
