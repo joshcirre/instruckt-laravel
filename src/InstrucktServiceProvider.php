@@ -9,7 +9,6 @@ use Illuminate\Support\ServiceProvider;
 use Instruckt\Laravel\Components\Toolbar;
 use Instruckt\Laravel\Console\InstallCommand;
 use Instruckt\Laravel\Http\Controllers\AnnotationController;
-use Instruckt\Laravel\Http\Controllers\SessionController;
 
 final class InstrucktServiceProvider extends ServiceProvider
 {
@@ -44,11 +43,8 @@ final class InstrucktServiceProvider extends ServiceProvider
             ->prefix(config('instruckt.route_prefix', 'instruckt'))
             ->name('instruckt.')
             ->group(function () {
-                Route::get('sessions', [SessionController::class, 'index'])->name('sessions.index');
-                Route::post('sessions', [SessionController::class, 'store'])->name('sessions.store');
-                Route::get('sessions/{id}', [SessionController::class, 'show'])->name('sessions.show');
-                Route::get('sessions/{id}/events', [SessionController::class, 'events'])->name('sessions.events');
-                Route::post('sessions/{sessionId}/annotations', [AnnotationController::class, 'store'])->name('annotations.store');
+                Route::get('annotations', [AnnotationController::class, 'index'])->name('annotations.index');
+                Route::post('annotations', [AnnotationController::class, 'store'])->name('annotations.store');
                 Route::patch('annotations/{id}', [AnnotationController::class, 'update'])->name('annotations.update');
                 Route::post('annotations/{id}/reply', [AnnotationController::class, 'reply'])->name('annotations.reply');
             });
