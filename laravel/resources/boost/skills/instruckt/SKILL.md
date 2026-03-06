@@ -1,51 +1,64 @@
 ---
 name: instruckt
-description: "Visual feedback from users via in-browser annotations. Activates when the user has left annotations or feedback in the browser, when you need to check for pending UI feedback, when working on fixes or changes requested through instruckt annotations, or when the user mentions instruckt, annotations, or visual feedback."
+description: "Visual feedback from users via in-browser annotations. Activates when the user pastes UI feedback markdown, when annotations or visual feedback are mentioned, or when you need to check for pending UI feedback via MCP."
 license: MIT
 metadata:
   author: joshcirre
 ---
 # Instruckt — Visual Feedback for AI Agents
 
-Instruckt lets users annotate elements directly in the browser. You receive structured feedback via MCP tools and can acknowledge, reply, or resolve each annotation.
+Instruckt lets users annotate elements directly in the browser. Feedback arrives in two ways:
+
+1. **Clipboard** — the user pastes structured markdown starting with `# UI Feedback`
+2. **MCP** — you call `instruckt.get_all_pending` to fetch unresolved annotations
 
 ## Workflow
 
-1. **Check for feedback** — call `instruckt.get_all_pending` at the start of a task or when prompted
-2. **Acknowledge** — call `instruckt.acknowledge` to signal you've seen an annotation
-3. **Work on the fix** — make the requested code changes
-4. **Reply or resolve** — use `instruckt.reply` to ask clarifying questions, or `instruckt.resolve` with a summary of what you changed
+When the user pastes UI feedback or you detect pending annotations:
+
+1. **Get the annotations** — read the pasted markdown or call `instruckt.get_all_pending`
+2. **Acknowledge** — call `instruckt.acknowledge` for each annotation to signal you've seen it
+3. **Make the fix** — use the element, component, classes, and text context to find and change the right code
+4. **Resolve each one** — call `instruckt.resolve` with the `annotation_id` and a summary of what you changed. **This is critical** — it removes the marker from the user's browser on next reload.
 
 ## MCP Tools
 
 | Tool | When to use |
 |------|-------------|
-| `instruckt.get_all_pending` | Get all unresolved annotations across sessions — use this first |
-| `instruckt.get_pending` | Get pending annotations for a specific session |
-| `instruckt.get_session` | Get full session details including resolved annotations |
-| `instruckt.list_sessions` | List all feedback sessions |
-| `instruckt.acknowledge` | Mark an annotation as "seen" — do this before starting work |
-| `instruckt.reply` | Ask a clarifying question or post a status update |
-| `instruckt.resolve` | Mark as resolved — include a summary of what you changed |
+| `instruckt.get_all_pending` | Get all unresolved annotations — use this first |
+| `instruckt.acknowledge` | Mark as "seen" — do this before starting work |
+| `instruckt.resolve` | Mark as resolved after fixing — include a summary |
 | `instruckt.dismiss` | Dismiss an annotation that doesn't need action |
+| `instruckt.reply` | Ask a clarifying question or post a status update |
+
+## Recognizing Pasted Feedback
+
+When the user pastes text that looks like this, treat it as instruckt annotations:
+
+```
+# UI Feedback: /dashboard
+
+## 1. Change the heading text
+- Element: `h1.text-xl` in `pages::dashboard`
+- Classes: `text-xl font-bold`
+- Text: "Welcome"
+```
+
+Each `##` item is one annotation. The element, component name, classes, and text context tell you where to find the code. After fixing each one, **always resolve it via MCP**.
 
 ## Understanding Annotations
 
-Each annotation includes:
-
-- **intent** — `fix` (bug), `change` (feature request), `question` (clarification needed), `approve` (looks good)
-- **severity** — `blocking` (must fix), `important` (should fix), `suggestion` (nice to have)
-- **element** — the HTML element name and CSS selector path
-- **framework** — detected component info (Livewire component name + wire:id, Vue component, React component, Svelte component)
-- **comment** — the user's feedback text
-- **selectedText** — any text the user highlighted before annotating
-- **thread** — conversation history between you and the user
+- **element** — short HTML element identifier (e.g. `button.btn-primary`)
+- **component** — framework component name (e.g. `pages::dashboard`, `UserMenu`)
+- **classes** — CSS classes on the element, useful for finding it in code
+- **text** — visible text content or selected text near the element
+- **intent** — `fix`, `change`, `question`, or `approve`
+- **severity** — `blocking`, `important`, or `suggestion`
 
 ## Best Practices
 
-- Always acknowledge annotations before starting work so the user sees you're on it
+- **Always resolve after fixing** — this is the most important step. Without it, the marker stays visible in the user's browser.
 - Address `blocking` severity first, then `important`, then `suggestion`
-- When resolving, include a clear summary: "Fixed the alignment issue in the navbar by updating the flex classes in `resources/views/components/nav.blade.php`"
-- Use `reply` to ask questions rather than guessing — the user sees your reply in real-time
-- The `framework` field tells you exactly which component to look at — use it to navigate directly to the right file
-- For Livewire annotations, the `wire_id` helps you identify the exact component instance
+- When resolving, include a clear summary: "Changed heading to 'Welcome to Fission!' in `resources/views/pages/dashboard.blade.php`"
+- The component name tells you which file to look at — use it to navigate directly
+- Use `reply` to ask questions rather than guessing
