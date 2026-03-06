@@ -29,6 +29,8 @@ final class InstrucktServiceProvider extends ServiceProvider
 
         if ($this->app->runningInConsole()) {
             $this->commands([InstallCommand::class]);
+
+            $this->promptInstallIfNeeded();
         }
     }
 
@@ -65,6 +67,18 @@ final class InstrucktServiceProvider extends ServiceProvider
         }
 
         $this->loadRoutesFrom(__DIR__ . '/../routes/mcp.php');
+    }
+
+    private function promptInstallIfNeeded(): void
+    {
+        if (! $this->app->configurationIsCached() && ! file_exists(config_path('instruckt.php'))) {
+            $this->app->booted(function () {
+                // Only show during artisan commands (not during composer dump-autoload itself)
+                if (isset($_SERVER['argv'][1]) && $_SERVER['argv'][1] === 'package:discover') {
+                    echo "\n  instruckt installed. Run: php artisan instruckt:install\n\n";
+                }
+            });
+        }
     }
 
     private function publishAssets(): void
