@@ -68,9 +68,5 @@ final class InstrucktServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/../config/instruckt.php' => config_path('instruckt.php'),
         ], 'instruckt-config');
-
-        $this->publishes([
-            __DIR__ . '/../dist' => public_path('vendor/instruckt'),
-        ], 'instruckt-assets');
     }
 }

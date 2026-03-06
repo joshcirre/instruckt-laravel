@@ -34,18 +34,33 @@ final class Toolbar extends Component
 
     private function resolveScriptSrc(): string
     {
+        // 1. Explicit config override
         if ($cdn = config('instruckt.cdn_url')) {
             return $cdn;
         }
 
-        // Use published asset if it exists, otherwise fall back to package dist
-        $published = public_path('vendor/instruckt/instruckt.iife.js');
-        if (file_exists($published)) {
+        // 2. Local node_modules (if npm installed)
+        $nodeModule = base_path('node_modules/instruckt/dist/instruckt.iife.js');
+        if (file_exists($nodeModule)) {
+            // Copy to public on first use so it's web-accessible
+            $publicPath = public_path('vendor/instruckt/instruckt.iife.js');
+            if (! file_exists($publicPath) || filemtime($nodeModule) > filemtime($publicPath)) {
+                @mkdir(dirname($publicPath), 0755, true);
+                copy($nodeModule, $publicPath);
+            }
+
             return asset('vendor/instruckt/instruckt.iife.js');
         }
 
-        // Package-relative dist (for local dev via path repository)
-        return asset('vendor/instruckt/instruckt.iife.js');
+        // 3. Already published to public
+        if (file_exists(public_path('vendor/instruckt/instruckt.iife.js'))) {
+            return asset('vendor/instruckt/instruckt.iife.js');
+        }
+
+        // 4. CDN fallback — always works, uses the npm package version
+        $version = config('instruckt.version', 'latest');
+
+        return "https://unpkg.com/instruckt@{$version}/dist/instruckt.iife.js";
     }
 
     public function render(): \Illuminate\Contracts\View\View

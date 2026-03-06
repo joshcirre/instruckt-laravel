@@ -27,7 +27,7 @@ final class InstallCommand extends Command
         $this->newLine();
 
         $this->call('vendor:publish', ['--tag' => 'instruckt-config', '--force' => false]);
-        $this->call('vendor:publish', ['--tag' => 'instruckt-assets', '--force' => true]);
+        $this->installNpmPackage();
 
         $framework = $this->detectFramework();
         $this->newLine();
@@ -52,6 +52,40 @@ final class InstallCommand extends Command
         $this->newLine();
 
         return self::SUCCESS;
+    }
+
+    // ── npm package ─────────────────────────────────────────────
+
+    private function installNpmPackage(): void
+    {
+        // Check if already installed
+        if (File::exists(base_path('node_modules/instruckt/dist/instruckt.iife.js'))) {
+            $this->line('  npm package instruckt already installed.');
+
+            return;
+        }
+
+        $useBun = File::exists(base_path('bun.lockb')) || File::exists(base_path('bun.lock'));
+        $cmd = $useBun ? 'bun add -d instruckt' : 'npm install --save-dev instruckt';
+
+        $this->components->info("Installing npm package: {$cmd}");
+
+        $process = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path());
+
+        if ($process) {
+            stream_get_contents($pipes[1]);
+            stream_get_contents($pipes[2]);
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            $exitCode = proc_close($process);
+
+            if ($exitCode === 0) {
+                $this->components->info('npm package installed.');
+            } else {
+                $this->components->warn('Could not install npm package automatically. Run manually:');
+                $this->line("  {$cmd}");
+            }
+        }
     }
 
     // ── Framework detection ──────────────────────────────────────
