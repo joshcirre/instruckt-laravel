@@ -58,7 +58,9 @@ final class SessionController
                 }
 
                 if (! empty($updated)) {
-                    ob_flush();
+                    if (ob_get_level()) {
+                        ob_flush();
+                    }
                     flush();
                 }
 
@@ -66,7 +68,9 @@ final class SessionController
             }
 
             echo ': reconnect' . PHP_EOL . PHP_EOL;
-            ob_flush();
+            if (ob_get_level()) {
+                ob_flush();
+            }
             flush();
         }, 200, [
             'Content-Type' => 'text/event-stream',

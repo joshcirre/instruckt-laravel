@@ -285,6 +285,7 @@ final class InstallCommand extends Command
 
         $layoutNames = [
             'app.blade.php',
+            'auth.blade.php',
             'guest.blade.php',
             'base.blade.php',
             'layout.blade.php',
