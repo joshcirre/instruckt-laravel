@@ -60,34 +60,53 @@ final class InstallCommand extends Command
 
     private function detectFramework(): string
     {
-        // Check composer.json/lock for PHP frameworks
-        if ($this->hasComposerPackage('livewire/livewire')) {
-            return 'livewire';
-        }
-
-        // Check package.json for JS frameworks
         $packageJson = $this->getPackageJson();
+        $deps = [];
 
         if ($packageJson) {
             $deps = array_merge(
                 $packageJson['dependencies'] ?? [],
                 $packageJson['devDependencies'] ?? [],
             );
+        }
 
+        // Inertia + Vue/React/Svelte (check Inertia first — it determines the layout pattern)
+        $hasInertia = $this->hasComposerPackage('inertiajs/inertia-laravel');
+
+        if ($hasInertia) {
             if (isset($deps['vue']) || isset($deps['@vitejs/plugin-vue'])) {
-                return 'vue';
+                return 'inertia-vue';
             }
 
             if (isset($deps['react']) || isset($deps['@vitejs/plugin-react'])) {
-                return 'react';
+                return 'inertia-react';
             }
 
             if (isset($deps['svelte']) || isset($deps['@sveltejs/vite-plugin-svelte'])) {
-                return 'svelte';
+                return 'inertia-svelte';
             }
+
+            return 'inertia-vue'; // Inertia default
         }
 
-        // Fallback — plain Blade
+        // Livewire (server-rendered — uses Blade component)
+        if ($this->hasComposerPackage('livewire/livewire')) {
+            return 'livewire';
+        }
+
+        // Standalone JS framework without Inertia (rare with Laravel, but possible)
+        if (isset($deps['vue'])) {
+            return 'vue';
+        }
+
+        if (isset($deps['react'])) {
+            return 'react';
+        }
+
+        if (isset($deps['svelte'])) {
+            return 'svelte';
+        }
+
         return 'blade';
     }
 
@@ -133,15 +152,91 @@ final class InstallCommand extends Command
 
     private function injectToolbar(string $framework): void
     {
-        $adapters = match ($framework) {
-            'livewire' => "['livewire']",
-            'vue' => "['vue']",
-            'react' => "['react']",
-            'svelte' => "['svelte']",
-            default => "['livewire']",
+        $isInertia = str_starts_with($framework, 'inertia-');
+
+        if ($isInertia) {
+            $this->injectInertiaToolbar($framework);
+        } else {
+            $this->injectBladeToolbar($framework);
+        }
+    }
+
+    private function injectInertiaToolbar(string $framework): void
+    {
+        $jsFramework = str_replace('inertia-', '', $framework);
+
+        // For Inertia apps, the layout is resources/views/app.blade.php
+        $layoutPath = resource_path('views/app.blade.php');
+
+        if (! File::exists($layoutPath)) {
+            $this->components->warn('Could not find resources/views/app.blade.php');
+            $this->line('  Add the instruckt script tag before </body> in your Inertia layout.');
+
+            return;
+        }
+
+        $contents = File::get($layoutPath);
+
+        if (str_contains($contents, 'instruckt')) {
+            $this->line('  Inertia layout already has instruckt configured.');
+
+            return;
+        }
+
+        if (! str_contains($contents, '</body>')) {
+            $this->components->warn('Could not find </body> in Inertia layout.');
+
+            return;
+        }
+
+        $routePrefix = config('instruckt.route_prefix', 'instruckt');
+
+        // Inject the IIFE script + init before </body>
+        $scriptBlock = <<<BLADE
+        @if(config('instruckt.enabled'))
+        <script src="{{ config('instruckt.cdn_url') ?? asset('vendor/instruckt/instruckt.iife.js') }}"></script>
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                Instruckt.init({
+                    endpoint: '/{$routePrefix}',
+                    adapters: ['{$jsFramework}'],
+                });
+            });
+        </script>
+        @endif
+        BLADE;
+
+        if (preg_match('/^([ \t]*)<\/body>/m', $contents, $matches)) {
+            $indent = $matches[1];
+            // Re-indent the script block to match
+            $lines = explode("\n", $scriptBlock);
+            $indented = array_map(fn ($line) => $line !== '' ? $indent.$line : $line, $lines);
+            $scriptBlock = implode("\n", $indented);
+            $contents = preg_replace('/^([ \t]*)<\/body>/m', $scriptBlock."\n{$indent}</body>", $contents, 1);
+        } else {
+            $contents = str_replace('</body>', $scriptBlock."\n</body>", $contents);
+        }
+
+        File::put($layoutPath, $contents);
+        $this->components->info('Injected instruckt into resources/views/app.blade.php');
+
+        // Prompt to install npm package (useful for importing in JS if they want the API)
+        $this->newLine();
+        $this->components->warn("Optional: install the npm package for programmatic access:");
+        $this->line("  npm install instruckt");
+    }
+
+    private function injectBladeToolbar(string $framework): void
+    {
+        $adapter = match ($framework) {
+            'livewire' => 'livewire',
+            'vue' => 'vue',
+            'react' => 'react',
+            'svelte' => 'svelte',
+            default => 'livewire',
         };
 
-        $tag = "<x-instruckt-toolbar :adapters=\"{$adapters}\" />";
+        $tag = "<x-instruckt-toolbar :adapters=\"['{$adapter}']\" />";
         $layouts = $this->findLayoutFiles();
 
         if (empty($layouts)) {
@@ -157,19 +252,16 @@ final class InstallCommand extends Command
             $relative = str_replace(base_path().'/', '', $layout);
             $contents = File::get($layout);
 
-            // Already has instruckt toolbar
             if (str_contains($contents, 'instruckt-toolbar') || str_contains($contents, 'x-instruckt')) {
                 $this->line("  {$relative} — already has toolbar");
 
                 continue;
             }
 
-            // Find </body> and inject before it
             if (! str_contains($contents, '</body>')) {
                 continue;
             }
 
-            // Detect indentation of the </body> tag
             if (preg_match('/^([ \t]*)<\/body>/m', $contents, $matches)) {
                 $indent = $matches[1];
                 $replacement = "{$indent}    {$tag}\n{$indent}</body>";
