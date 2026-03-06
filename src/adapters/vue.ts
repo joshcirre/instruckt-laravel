@@ -15,8 +15,8 @@ interface VueElement extends Element {
 }
 
 export function isAvailable(): boolean {
-  // Vue 3 attaches __vueParentComponent; Vue 2 attaches __vue__
-  return true // detected per-element
+  // Vue 3: mounts with data-v-app attribute; Vue 2: exposes global Vue constructor
+  return !!(document.querySelector('[data-v-app]') || (window as unknown as Record<string, unknown>)['Vue'])
 }
 
 /** Walk up the DOM to find the nearest Vue component */

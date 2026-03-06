@@ -427,9 +427,18 @@ var Toolbar = class {
       this.setMode(next ? "frozen" : "idle");
       this.callbacks.onFreezeAnimations(next);
     });
+    this.copyBtn = this.makeBtn("\u{1F4CB}", "Copy annotations as markdown", () => {
+      this.callbacks.onCopy();
+      this.copyBtn.textContent = "\u2713";
+      setTimeout(() => {
+        this.copyBtn.textContent = "\u{1F4CB}";
+      }, 1200);
+    });
     const divider = document.createElement("div");
     divider.className = "divider";
-    toolbar.append(this.annotateBtn, divider, this.freezeBtn);
+    const divider2 = document.createElement("div");
+    divider2.className = "divider";
+    toolbar.append(this.annotateBtn, divider, this.freezeBtn, divider2, this.copyBtn);
     this.shadow.appendChild(toolbar);
     this.applyPosition();
     document.body.appendChild(this.host);
@@ -979,6 +988,61 @@ function getContext3(el) {
   };
 }
 
+// src/adapters/react.ts
+function getFiberKey(el) {
+  for (const key of Object.keys(el)) {
+    if (key.startsWith("__reactFiber$") || key.startsWith("__reactInternalInstance$")) {
+      return key;
+    }
+  }
+  return null;
+}
+function getComponentName(fiber) {
+  let node = fiber;
+  while (node) {
+    const { type } = node;
+    if (typeof type === "function" && type.name) {
+      const name = type.name;
+      if (name[0] === name[0].toUpperCase() && name.length > 1) return name;
+    }
+    if (typeof type === "object" && type !== null && type.displayName) {
+      return type.displayName;
+    }
+    node = node.return;
+  }
+  return "Component";
+}
+function getProps(fiber) {
+  var _a, _b;
+  const props = (_b = (_a = fiber.memoizedProps) != null ? _a : fiber.pendingProps) != null ? _b : {};
+  const result = {};
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "children" || typeof v === "function") continue;
+    try {
+      result[k] = JSON.parse(JSON.stringify(v));
+    } catch (e) {
+      result[k] = String(v);
+    }
+  }
+  return result;
+}
+function getContext4(el) {
+  let node = el;
+  while (node && node !== document.documentElement) {
+    const key = getFiberKey(node);
+    if (key) {
+      const fiber = node[key];
+      if (fiber) {
+        const component = getComponentName(fiber);
+        const data = getProps(fiber);
+        return { framework: "react", component, data };
+      }
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
 // src/instruckt.ts
 var SESSION_KEY = "instruckt_session";
 var Instruckt = class {
@@ -1047,7 +1111,7 @@ var Instruckt = class {
       });
     };
     this.config = __spreadValues({
-      adapters: ["livewire", "vue", "svelte"],
+      adapters: ["livewire", "vue", "svelte", "react"],
       theme: "auto",
       position: "bottom-right"
     }, config);
@@ -1064,7 +1128,8 @@ var Instruckt = class {
     }
     this.toolbar = new Toolbar(this.config.position, {
       onToggleAnnotate: (active) => this.setAnnotating(active),
-      onFreezeAnimations: (frozen) => this.setFrozen(frozen)
+      onFreezeAnimations: (frozen) => this.setFrozen(frozen),
+      onCopy: () => this.copyAnnotations()
     });
     this.highlight = new ElementHighlight();
     this.popup = new AnnotationPopup();
@@ -1172,6 +1237,10 @@ var Instruckt = class {
     }
     if (adapters.includes("svelte")) {
       const ctx = getContext3(el);
+      if (ctx) return ctx;
+    }
+    if (adapters.includes("react")) {
+      const ctx = getContext4(el);
       if (ctx) return ctx;
     }
     return null;
@@ -1297,6 +1366,58 @@ var Instruckt = class {
       var _a;
       return (_a = this.markers) == null ? void 0 : _a.upsert(a, i + 1);
     });
+  }
+  // ── Copy / export ─────────────────────────────────────────────
+  copyAnnotations() {
+    const md = this.exportMarkdown();
+    navigator.clipboard.writeText(md).catch(() => {
+      const el = document.createElement("textarea");
+      el.value = md;
+      el.style.cssText = "position:fixed;left:-9999px";
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      el.remove();
+    });
+  }
+  exportMarkdown() {
+    const pending = this.annotations.filter((a) => a.status === "pending" || a.status === "acknowledged");
+    if (pending.length === 0) {
+      return `## Instruckt Feedback \u2014 ${window.location.href}
+
+No open annotations.`;
+    }
+    const lines = [
+      `## Instruckt Feedback \u2014 ${window.location.href}`,
+      `> ${pending.length} open annotation${pending.length === 1 ? "" : "s"}`,
+      ""
+    ];
+    pending.forEach((a, i) => {
+      const severityIcon = a.severity === "blocking" ? "\u{1F534}" : a.severity === "important" ? "\u{1F7E0}" : "\u{1F7E1}";
+      const intentLabel = a.intent === "fix" ? "Fix" : a.intent === "change" ? "Change" : a.intent === "question" ? "Question" : "Approve";
+      lines.push(`### ${i + 1}. ${a.element} \u2014 ${intentLabel} ${severityIcon}`);
+      lines.push("");
+      lines.push(a.comment);
+      lines.push("");
+      lines.push(`**Selector**: \`${a.elementPath}\``);
+      if (a.framework) {
+        const fw = a.framework;
+        const label = fw.framework === "livewire" ? `Livewire \u2014 ${fw.component}` : fw.framework === "vue" ? `Vue \u2014 ${fw.component}` : fw.framework === "react" ? `React \u2014 ${fw.component}` : fw.component;
+        lines.push(`**Component**: ${label}`);
+      }
+      if (a.selectedText) lines.push(`**Selected text**: "${a.selectedText}"`);
+      if (a.thread && a.thread.length > 0) {
+        lines.push("");
+        lines.push("**Thread:**");
+        a.thread.forEach((m) => {
+          lines.push(`- **${m.role === "agent" ? "Agent" : "You"}**: ${m.content}`);
+        });
+      }
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    });
+    return lines.join("\n");
   }
   // ── Public API ────────────────────────────────────────────────
   getAnnotations() {

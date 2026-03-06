@@ -6,14 +6,14 @@
   "author": "instruckt",
   "repository": {
     "type": "git",
-    "url": "https://github.com/instruckt/instruckt"
+    "url": "https://github.com/joshcirre/instruckt"
   },
   "main": "dist/instruckt.cjs.js",
   "module": "dist/instruckt.esm.js",
   "types": "dist/instruckt.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/instruckt.d.ts",
       "require": "./dist/instruckt.cjs.js",
       "import": "./dist/instruckt.esm.js"
     }

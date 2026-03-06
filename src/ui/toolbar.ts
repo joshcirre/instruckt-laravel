@@ -5,6 +5,7 @@ export type ToolbarMode = 'idle' | 'annotating' | 'frozen'
 interface ToolbarCallbacks {
   onToggleAnnotate: (active: boolean) => void
   onFreezeAnimations: (frozen: boolean) => void
+  onCopy: () => void
 }
 
 export class Toolbar {
@@ -12,6 +13,7 @@ export class Toolbar {
   private shadow!: ShadowRoot
   private annotateBtn!: HTMLButtonElement
   private freezeBtn!: HTMLButtonElement
+  private copyBtn!: HTMLButtonElement
   private mode: ToolbarMode = 'idle'
   private dragging = false
   private dragOffset = { x: 0, y: 0 }
@@ -49,10 +51,19 @@ export class Toolbar {
       this.callbacks.onFreezeAnimations(next)
     })
 
+    this.copyBtn = this.makeBtn('📋', 'Copy annotations as markdown', () => {
+      this.callbacks.onCopy()
+      // Flash the button to confirm copy
+      this.copyBtn.textContent = '✓'
+      setTimeout(() => { this.copyBtn.textContent = '📋' }, 1200)
+    })
+
     const divider = document.createElement('div')
     divider.className = 'divider'
+    const divider2 = document.createElement('div')
+    divider2.className = 'divider'
 
-    toolbar.append(this.annotateBtn, divider, this.freezeBtn)
+    toolbar.append(this.annotateBtn, divider, this.freezeBtn, divider2, this.copyBtn)
     this.shadow.appendChild(toolbar)
 
     this.applyPosition()

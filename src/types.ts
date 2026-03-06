@@ -11,7 +11,7 @@ export interface ThreadMessage {
 }
 
 export interface FrameworkContext {
-  framework: 'livewire' | 'vue' | 'svelte'
+  framework: 'livewire' | 'vue' | 'svelte' | 'react'
   component: string
   data?: Record<string, unknown>
   // Livewire-specific
@@ -68,7 +68,7 @@ export interface InstrucktConfig {
   /** URL to POST annotations to. Default: '/instruckt' */
   endpoint: string
   /** Framework adapters to activate. Default: auto-detect */
-  adapters?: Array<'livewire' | 'vue' | 'svelte'>
+  adapters?: Array<'livewire' | 'vue' | 'svelte' | 'react'>
   /** Theme preference. Default: 'auto' */
   theme?: 'light' | 'dark' | 'auto'
   /** Position of the toolbar. Default: 'bottom-right' */

@@ -11,6 +11,7 @@ import { getElementSelector, getElementName, getNearbyText, getCssClasses, getPa
 import * as livewireAdapter from './adapters/livewire'
 import * as vueAdapter from './adapters/vue'
 import * as svelteAdapter from './adapters/svelte'
+import * as reactAdapter from './adapters/react'
 
 // Re-export for api.ts consumers
 export type { AnnotationPayload }
@@ -39,7 +40,7 @@ export class Instruckt {
 
   constructor(config: InstrucktConfig) {
     this.config = {
-      adapters: ['livewire', 'vue', 'svelte'],
+      adapters: ['livewire', 'vue', 'svelte', 'react'],
       theme: 'auto',
       position: 'bottom-right',
       ...config,
@@ -61,6 +62,7 @@ export class Instruckt {
     this.toolbar = new Toolbar(this.config.position, {
       onToggleAnnotate: (active) => this.setAnnotating(active),
       onFreezeAnimations: (frozen) => this.setFrozen(frozen),
+      onCopy: () => this.copyAnnotations(),
     })
 
     this.highlight = new ElementHighlight()
@@ -233,6 +235,10 @@ export class Instruckt {
       const ctx = svelteAdapter.getContext(el)
       if (ctx) return ctx
     }
+    if (adapters.includes('react')) {
+      const ctx = reactAdapter.getContext(el)
+      if (ctx) return ctx
+    }
     return null
   }
 
@@ -373,6 +379,63 @@ export class Instruckt {
 
   private syncMarkersFromAnnotations(): void {
     this.annotations.forEach((a, i) => this.markers?.upsert(a, i + 1))
+  }
+
+  // ── Copy / export ─────────────────────────────────────────────
+
+  private copyAnnotations(): void {
+    const md = this.exportMarkdown()
+    navigator.clipboard.writeText(md).catch(() => {
+      // Fallback for browsers that don't support clipboard API
+      const el = document.createElement('textarea')
+      el.value = md
+      el.style.cssText = 'position:fixed;left:-9999px'
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      el.remove()
+    })
+  }
+
+  exportMarkdown(): string {
+    const pending = this.annotations.filter(a => a.status === 'pending' || a.status === 'acknowledged')
+    if (pending.length === 0) {
+      return `## Instruckt Feedback — ${window.location.href}\n\nNo open annotations.`
+    }
+
+    const lines: string[] = [
+      `## Instruckt Feedback — ${window.location.href}`,
+      `> ${pending.length} open annotation${pending.length === 1 ? '' : 's'}`,
+      '',
+    ]
+
+    pending.forEach((a, i) => {
+      const severityIcon = a.severity === 'blocking' ? '🔴' : a.severity === 'important' ? '🟠' : '🟡'
+      const intentLabel = a.intent === 'fix' ? 'Fix' : a.intent === 'change' ? 'Change' : a.intent === 'question' ? 'Question' : 'Approve'
+      lines.push(`### ${i + 1}. ${a.element} — ${intentLabel} ${severityIcon}`)
+      lines.push('')
+      lines.push(a.comment)
+      lines.push('')
+      lines.push(`**Selector**: \`${a.elementPath}\``)
+      if (a.framework) {
+        const fw = a.framework
+        const label = fw.framework === 'livewire' ? `Livewire — ${fw.component}` : fw.framework === 'vue' ? `Vue — ${fw.component}` : fw.framework === 'react' ? `React — ${fw.component}` : fw.component
+        lines.push(`**Component**: ${label}`)
+      }
+      if (a.selectedText) lines.push(`**Selected text**: "${a.selectedText}"`)
+      if (a.thread && a.thread.length > 0) {
+        lines.push('')
+        lines.push('**Thread:**')
+        a.thread.forEach(m => {
+          lines.push(`- **${m.role === 'agent' ? 'Agent' : 'You'}**: ${m.content}`)
+        })
+      }
+      lines.push('')
+      lines.push('---')
+      lines.push('')
+    })
+
+    return lines.join('\n')
   }
 
   // ── Public API ────────────────────────────────────────────────

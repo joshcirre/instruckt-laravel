@@ -1,5 +1,5 @@
 {
-  "name": "instruckt/laravel",
+  "name": "joshcirre/instruckt-laravel",
   "description": "Visual feedback for AI coding agents — Laravel MCP package",
   "keywords": ["laravel", "livewire", "mcp", "ai", "agent", "feedback", "instruckt"],
   "license": "MIT",

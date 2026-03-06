@@ -9,7 +9,7 @@ interface ThreadMessage {
     timestamp: string;
 }
 interface FrameworkContext {
-    framework: 'livewire' | 'vue' | 'svelte';
+    framework: 'livewire' | 'vue' | 'svelte' | 'react';
     component: string;
     data?: Record<string, unknown>;
     wire_id?: string;
@@ -58,7 +58,7 @@ interface InstrucktConfig {
     /** URL to POST annotations to. Default: '/instruckt' */
     endpoint: string;
     /** Framework adapters to activate. Default: auto-detect */
-    adapters?: Array<'livewire' | 'vue' | 'svelte'>;
+    adapters?: Array<'livewire' | 'vue' | 'svelte' | 'react'>;
     /** Theme preference. Default: 'auto' */
     theme?: 'light' | 'dark' | 'auto';
     /** Position of the toolbar. Default: 'bottom-right' */
@@ -111,6 +111,8 @@ declare class Instruckt {
     private onKeydown;
     private pendingCount;
     private syncMarkersFromAnnotations;
+    private copyAnnotations;
+    exportMarkdown(): string;
     getAnnotations(): Annotation[];
     getSession(): Session | null;
     destroy(): void;
