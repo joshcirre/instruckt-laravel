@@ -35,6 +35,7 @@ export class Instruckt {
   private rafId: number | null = null
   private pendingMouseTarget: Element | null = null
   private highlightLocked = false
+  private pollTimer: ReturnType<typeof setInterval> | null = null
   private boundKeydown: (e: KeyboardEvent) => void
   private boundReposition = (): void => {
     this.markers?.reposition(this.annotations)
@@ -90,6 +91,8 @@ export class Instruckt {
 
     // Load persisted annotations from the backend
     this.loadAnnotations()
+    // Poll for changes (e.g. agent resolved via MCP)
+    this.pollTimer = setInterval(() => this.pollForChanges(), 3000)
 
     this.syncMarkers()
   }
@@ -194,6 +197,27 @@ export class Instruckt {
       const raw = localStorage.getItem(Instruckt.STORAGE_KEY)
       if (raw) this.annotations = JSON.parse(raw)
     } catch { /* corrupt or unavailable */ }
+  }
+
+  /** Poll API for status changes (e.g. agent resolved via MCP) */
+  private async pollForChanges(): Promise<void> {
+    try {
+      const remote = await this.api.getAnnotations()
+      let changed = false
+      for (const r of remote) {
+        const local = this.annotations.find(a => a.id === r.id)
+        if (local && local.status !== r.status) {
+          local.status = r.status
+          local.resolvedAt = r.resolvedAt
+          local.resolvedBy = r.resolvedBy
+          changed = true
+        }
+      }
+      if (changed) {
+        this.saveToStorage()
+        this.syncMarkers()
+      }
+    } catch { /* no backend or network error — skip */ }
   }
 
   // ── Page-scoped markers ─────────────────────────────────────────
@@ -704,5 +728,6 @@ export class Instruckt {
     this.popup?.destroy()
     this.markers?.destroy()
     if (this.rafId !== null) cancelAnimationFrame(this.rafId)
+    if (this.pollTimer !== null) clearInterval(this.pollTimer)
   }
 }

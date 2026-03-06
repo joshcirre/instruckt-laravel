@@ -73,6 +73,7 @@ declare class Instruckt {
     private rafId;
     private pendingMouseTarget;
     private highlightLocked;
+    private pollTimer;
     private boundKeydown;
     private boundReposition;
     constructor(config: InstrucktConfig);
@@ -84,6 +85,8 @@ declare class Instruckt {
     private loadAnnotations;
     private saveToStorage;
     private loadFromStorage;
+    /** Poll API for status changes (e.g. agent resolved via MCP) */
+    private pollForChanges;
     private syncMarkers;
     private annotationPageKey;
     private pageAnnotations;

@@ -1212,6 +1212,7 @@ var _Instruckt = class _Instruckt {
     this.rafId = null;
     this.pendingMouseTarget = null;
     this.highlightLocked = false;
+    this.pollTimer = null;
     this.boundReposition = () => {
       var _a;
       (_a = this.markers) == null ? void 0 : _a.reposition(this.annotations);
@@ -1342,6 +1343,7 @@ var _Instruckt = class _Instruckt {
       setTimeout(() => this.reattach(), 0);
     });
     this.loadAnnotations();
+    this.pollTimer = setInterval(() => this.pollForChanges(), 3e3);
     this.syncMarkers();
   }
   makeToolbarCallbacks() {
@@ -1417,6 +1419,27 @@ var _Instruckt = class _Instruckt {
     try {
       const raw = localStorage.getItem(_Instruckt.STORAGE_KEY);
       if (raw) this.annotations = JSON.parse(raw);
+    } catch (e) {
+    }
+  }
+  /** Poll API for status changes (e.g. agent resolved via MCP) */
+  async pollForChanges() {
+    try {
+      const remote = await this.api.getAnnotations();
+      let changed = false;
+      for (const r of remote) {
+        const local = this.annotations.find((a) => a.id === r.id);
+        if (local && local.status !== r.status) {
+          local.status = r.status;
+          local.resolvedAt = r.resolvedAt;
+          local.resolvedBy = r.resolvedBy;
+          changed = true;
+        }
+      }
+      if (changed) {
+        this.saveToStorage();
+        this.syncMarkers();
+      }
     } catch (e) {
     }
   }
@@ -1793,6 +1816,7 @@ No open annotations.`;
     (_c = this.popup) == null ? void 0 : _c.destroy();
     (_d = this.markers) == null ? void 0 : _d.destroy();
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
+    if (this.pollTimer !== null) clearInterval(this.pollTimer);
   }
 };
 // ── Persistence ─────────────────────────────────────────────────
