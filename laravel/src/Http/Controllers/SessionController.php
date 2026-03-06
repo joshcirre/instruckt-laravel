@@ -37,6 +37,7 @@ final class SessionController
         Store::getSessionOrFail($id);
 
         return response()->stream(function () use ($id) {
+            set_time_limit(0);
             $deadline = time() + 60;
             $lastChecked = now()->subSecond()->toIso8601String();
 

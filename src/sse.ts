@@ -1,4 +1,5 @@
 import type { Annotation } from './types'
+import { toCamelCase } from './api'
 
 type AnnotationEventHandler = (annotation: Annotation) => void
 
@@ -18,7 +19,8 @@ export class InstrucktSSE {
 
     this.source.addEventListener('annotation.updated', (e: MessageEvent) => {
       try {
-        const annotation: Annotation = JSON.parse(e.data)
+        const raw = JSON.parse(e.data)
+        const annotation = toCamelCase(raw) as unknown as Annotation
         this.onUpdate(annotation)
       } catch {
         // ignore malformed events

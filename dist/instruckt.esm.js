@@ -29,6 +29,25 @@ function headers() {
   if (csrf) h["X-XSRF-TOKEN"] = csrf;
   return h;
 }
+function toCamelCase(obj) {
+  return toCamel(obj);
+}
+function toCamel(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const camel = k.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    out[camel] = Array.isArray(v) ? v.map((item) => item && typeof item === "object" && !Array.isArray(item) ? toCamel(item) : item) : v && typeof v === "object" && !Array.isArray(v) ? toCamel(v) : v;
+  }
+  return out;
+}
+function toSnake(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const snake = k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+    out[snake] = v && typeof v === "object" && !Array.isArray(v) ? toSnake(v) : v;
+  }
+  return out;
+}
 var InstrucktApi = class {
   constructor(endpoint) {
     this.endpoint = endpoint;
@@ -40,32 +59,32 @@ var InstrucktApi = class {
       body: JSON.stringify({ url })
     });
     if (!res.ok) throw new Error(`instruckt: failed to create session (${res.status})`);
-    return res.json();
+    return toCamel(await res.json());
   }
   async getSession(sessionId) {
     const res = await fetch(`${this.endpoint}/sessions/${sessionId}`, {
       headers: { Accept: "application/json" }
     });
     if (!res.ok) throw new Error(`instruckt: failed to get session (${res.status})`);
-    return res.json();
+    return toCamel(await res.json());
   }
   async addAnnotation(sessionId, data) {
     const res = await fetch(`${this.endpoint}/sessions/${sessionId}/annotations`, {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify(data)
+      body: JSON.stringify(toSnake(data))
     });
     if (!res.ok) throw new Error(`instruckt: failed to add annotation (${res.status})`);
-    return res.json();
+    return toCamel(await res.json());
   }
   async updateAnnotation(annotationId, data) {
     const res = await fetch(`${this.endpoint}/annotations/${annotationId}`, {
       method: "PATCH",
       headers: headers(),
-      body: JSON.stringify(data)
+      body: JSON.stringify(toSnake(data))
     });
     if (!res.ok) throw new Error(`instruckt: failed to update annotation (${res.status})`);
-    return res.json();
+    return toCamel(await res.json());
   }
   async addReply(annotationId, content, role = "human") {
     const res = await fetch(`${this.endpoint}/annotations/${annotationId}/reply`, {
@@ -74,7 +93,7 @@ var InstrucktApi = class {
       body: JSON.stringify({ role, content })
     });
     if (!res.ok) throw new Error(`instruckt: failed to add reply (${res.status})`);
-    return res.json();
+    return toCamel(await res.json());
   }
 };
 
@@ -91,7 +110,8 @@ var InstrucktSSE = class {
     this.source = new EventSource(`${this.endpoint}/sessions/${this.sessionId}/events`);
     this.source.addEventListener("annotation.updated", (e) => {
       try {
-        const annotation = JSON.parse(e.data);
+        const raw = JSON.parse(e.data);
+        const annotation = toCamelCase(raw);
         this.onUpdate(annotation);
       } catch (e2) {
       }
@@ -536,7 +556,7 @@ var ElementHighlight = class {
 
 // src/ui/popup.ts
 function esc(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s != null ? s : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function fwIcon(fw) {
   var _a;
