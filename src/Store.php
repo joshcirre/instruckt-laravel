@@ -4,76 +4,79 @@ declare(strict_types=1);
 
 namespace Instruckt\Laravel;
 
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use PDO;
 
 final class Store
 {
-    private const PREFIX = 'instruckt:';
-    private const SESSIONS_KEY = self::PREFIX . 'sessions';
-    private const TTL = 86400; // 24 hours — dev data is ephemeral
+    private static ?PDO $pdo = null;
 
-    // ── Sessions ─────────────────────────────────────────────────
-
-    public static function createSession(string $url): array
+    private static function db(): PDO
     {
-        $session = [
-            'id' => (string) Str::ulid(),
-            'url' => $url,
-            'status' => 'active',
-            'created_at' => now()->toIso8601String(),
-            'updated_at' => now()->toIso8601String(),
-        ];
+        if (self::$pdo === null) {
+            $path = base_path('instruckt.sqlite');
+            $isNew = ! file_exists($path);
 
-        $sessions = self::allSessionIds();
-        $sessions[] = $session['id'];
-        Cache::put(self::SESSIONS_KEY, $sessions, self::TTL);
-        Cache::put(self::sessionKey($session['id']), $session, self::TTL);
+            self::$pdo = new PDO("sqlite:{$path}", null, null, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]);
 
-        return $session;
-    }
+            self::$pdo->exec('PRAGMA journal_mode=WAL');
 
-    public static function getSession(string $id): ?array
-    {
-        return Cache::get(self::sessionKey($id));
-    }
-
-    public static function getSessionOrFail(string $id): array
-    {
-        $session = self::getSession($id);
-
-        if (! $session) {
-            abort(404, 'Session not found.');
-        }
-
-        return $session;
-    }
-
-    public static function listSessions(): array
-    {
-        $ids = self::allSessionIds();
-        $sessions = [];
-
-        foreach (array_reverse($ids) as $id) {
-            $session = Cache::get(self::sessionKey($id));
-
-            if ($session) {
-                $sessions[] = $session;
+            if ($isNew) {
+                self::migrate();
             }
         }
 
-        return array_slice($sessions, 0, 50);
+        return self::$pdo;
     }
 
-    // ── Annotations ──────────────────────────────────────────────
-
-    public static function createAnnotation(string $sessionId, array $data): array
+    private static function migrate(): void
     {
-        self::getSessionOrFail($sessionId);
+        self::$pdo->exec(<<<'SQL'
+            CREATE TABLE IF NOT EXISTS annotations (
+                id TEXT PRIMARY KEY,
+                url TEXT NOT NULL,
+                x REAL NOT NULL DEFAULT 0,
+                y REAL NOT NULL DEFAULT 0,
+                comment TEXT NOT NULL,
+                element TEXT NOT NULL DEFAULT '',
+                element_path TEXT DEFAULT '',
+                css_classes TEXT,
+                nearby_text TEXT,
+                selected_text TEXT,
+                bounding_box TEXT,
+                intent TEXT NOT NULL DEFAULT 'fix',
+                severity TEXT NOT NULL DEFAULT 'important',
+                status TEXT NOT NULL DEFAULT 'pending',
+                framework TEXT,
+                thread TEXT NOT NULL DEFAULT '[]',
+                resolved_by TEXT,
+                resolved_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        SQL);
+    }
 
-        $annotation = [
-            'id' => (string) Str::ulid(),
-            'session_id' => $sessionId,
+    public static function createAnnotation(array $data): array
+    {
+        $id = (string) Str::ulid();
+        $now = now()->toIso8601String();
+
+        $stmt = self::db()->prepare(<<<'SQL'
+            INSERT INTO annotations (id, url, x, y, comment, element, element_path, css_classes,
+                nearby_text, selected_text, bounding_box, intent, severity, status, framework,
+                thread, resolved_by, resolved_at, created_at, updated_at)
+            VALUES (:id, :url, :x, :y, :comment, :element, :element_path, :css_classes,
+                :nearby_text, :selected_text, :bounding_box, :intent, :severity, 'pending', :framework,
+                '[]', NULL, NULL, :created_at, :updated_at)
+        SQL);
+
+        $stmt->execute([
+            'id' => $id,
+            'url' => $data['url'] ?? '',
             'x' => (float) ($data['x'] ?? 0),
             'y' => (float) ($data['y'] ?? 0),
             'comment' => $data['comment'] ?? '',
@@ -82,38 +85,24 @@ final class Store
             'css_classes' => $data['css_classes'] ?? null,
             'nearby_text' => $data['nearby_text'] ?? null,
             'selected_text' => $data['selected_text'] ?? null,
-            'bounding_box' => $data['bounding_box'] ?? null,
+            'bounding_box' => isset($data['bounding_box']) ? json_encode($data['bounding_box']) : null,
             'intent' => $data['intent'] ?? 'fix',
             'severity' => $data['severity'] ?? 'important',
-            'status' => 'pending',
-            'framework' => $data['framework'] ?? null,
-            'thread' => [],
-            'url' => $data['url'] ?? '',
-            'resolved_by' => null,
-            'resolved_at' => null,
-            'created_at' => now()->toIso8601String(),
-            'updated_at' => now()->toIso8601String(),
-        ];
+            'framework' => isset($data['framework']) ? json_encode($data['framework']) : null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
 
-        // Store the annotation
-        Cache::put(self::annotationKey($annotation['id']), $annotation, self::TTL);
-
-        // Add to session's annotation index
-        $index = Cache::get(self::sessionAnnotationsKey($sessionId), []);
-        $index[] = $annotation['id'];
-        Cache::put(self::sessionAnnotationsKey($sessionId), $index, self::TTL);
-
-        // Add to global annotation index
-        $global = Cache::get(self::PREFIX . 'all_annotations', []);
-        $global[] = $annotation['id'];
-        Cache::put(self::PREFIX . 'all_annotations', $global, self::TTL);
-
-        return $annotation;
+        return self::getAnnotationOrFail($id);
     }
 
     public static function getAnnotation(string $id): ?array
     {
-        return Cache::get(self::annotationKey($id));
+        $stmt = self::db()->prepare('SELECT * FROM annotations WHERE id = :id');
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch();
+
+        return $row ? self::hydrate($row) : null;
     }
 
     public static function getAnnotationOrFail(string $id): array
@@ -129,17 +118,33 @@ final class Store
 
     public static function updateAnnotation(string $id, array $data): array
     {
-        $annotation = self::getAnnotationOrFail($id);
+        self::getAnnotationOrFail($id);
+
+        $allowed = ['status', 'comment', 'resolved_by', 'resolved_at', 'thread'];
+        $sets = [];
+        $params = ['id' => $id, 'updated_at' => now()->toIso8601String()];
 
         foreach ($data as $key => $value) {
-            $annotation[$key] = $value;
+            if (! in_array($key, $allowed, true)) {
+                continue;
+            }
+
+            if ($key === 'thread') {
+                $value = json_encode($value);
+            }
+
+            $sets[] = "{$key} = :{$key}";
+            $params[$key] = $value;
         }
 
-        $annotation['updated_at'] = now()->toIso8601String();
+        $sets[] = 'updated_at = :updated_at';
 
-        Cache::put(self::annotationKey($id), $annotation, self::TTL);
+        if (! empty($sets)) {
+            $sql = 'UPDATE annotations SET ' . implode(', ', $sets) . ' WHERE id = :id';
+            self::db()->prepare($sql)->execute($params);
+        }
 
-        return $annotation;
+        return self::getAnnotationOrFail($id);
     }
 
     public static function addThreadMessage(string $annotationId, string $role, string $content): array
@@ -157,75 +162,31 @@ final class Store
         return self::updateAnnotation($annotationId, ['thread' => $thread]);
     }
 
-    public static function getSessionAnnotations(string $sessionId): array
+    public static function allAnnotations(): array
     {
-        $index = Cache::get(self::sessionAnnotationsKey($sessionId), []);
-        $annotations = [];
+        $rows = self::db()->query('SELECT * FROM annotations ORDER BY created_at ASC')->fetchAll();
 
-        foreach ($index as $id) {
-            $annotation = Cache::get(self::annotationKey($id));
-
-            if ($annotation) {
-                $annotations[] = $annotation;
-            }
-        }
-
-        // Sort oldest first
-        usort($annotations, fn ($a, $b) => $a['created_at'] <=> $b['created_at']);
-
-        return $annotations;
+        return array_map([self::class, 'hydrate'], $rows);
     }
 
-    public static function getPendingAnnotations(?string $sessionId = null): array
+    public static function getPendingAnnotations(): array
     {
-        if ($sessionId) {
-            $annotations = self::getSessionAnnotations($sessionId);
-        } else {
-            $ids = Cache::get(self::PREFIX . 'all_annotations', []);
-            $annotations = [];
+        $stmt = self::db()->prepare(
+            "SELECT * FROM annotations WHERE status IN ('pending', 'acknowledged') ORDER BY created_at ASC"
+        );
+        $stmt->execute();
 
-            foreach ($ids as $id) {
-                $annotation = Cache::get(self::annotationKey($id));
-
-                if ($annotation) {
-                    $annotations[] = $annotation;
-                }
-            }
-        }
-
-        $pending = array_filter($annotations, fn ($a) => in_array($a['status'], ['pending', 'acknowledged'], true));
-
-        usort($pending, fn ($a, $b) => $a['created_at'] <=> $b['created_at']);
-
-        return array_values($pending);
+        return array_map([self::class, 'hydrate'], $stmt->fetchAll());
     }
 
-    public static function getRecentlyUpdatedAnnotations(string $sessionId, string $since): array
+    private static function hydrate(array $row): array
     {
-        $annotations = self::getSessionAnnotations($sessionId);
+        $row['x'] = (float) $row['x'];
+        $row['y'] = (float) $row['y'];
+        $row['bounding_box'] = $row['bounding_box'] ? json_decode($row['bounding_box'], true) : null;
+        $row['framework'] = $row['framework'] ? json_decode($row['framework'], true) : null;
+        $row['thread'] = json_decode($row['thread'] ?? '[]', true);
 
-        return array_values(array_filter($annotations, fn ($a) => $a['updated_at'] > $since));
-    }
-
-    // ── Keys ─────────────────────────────────────────────────────
-
-    private static function sessionKey(string $id): string
-    {
-        return self::PREFIX . "session:{$id}";
-    }
-
-    private static function annotationKey(string $id): string
-    {
-        return self::PREFIX . "annotation:{$id}";
-    }
-
-    private static function sessionAnnotationsKey(string $sessionId): string
-    {
-        return self::PREFIX . "session:{$sessionId}:annotations";
-    }
-
-    private static function allSessionIds(): array
-    {
-        return Cache::get(self::SESSIONS_KEY, []);
+        return $row;
     }
 }

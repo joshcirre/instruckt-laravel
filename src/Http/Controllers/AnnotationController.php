@@ -10,14 +10,19 @@ use Instruckt\Laravel\Store;
 
 final class AnnotationController
 {
-    public function store(Request $request, string $sessionId): JsonResponse
+    public function index(): JsonResponse
+    {
+        return response()->json(Store::allAnnotations());
+    }
+
+    public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
             'x' => 'required|numeric',
             'y' => 'required|numeric',
             'comment' => 'required|string|max:2000',
             'element' => 'required|string|max:255',
-            'element_path' => 'required|string|max:2048',
+            'element_path' => 'nullable|string|max:2048',
             'css_classes' => 'nullable|string',
             'nearby_text' => 'nullable|string|max:500',
             'selected_text' => 'nullable|string|max:500',
@@ -28,7 +33,7 @@ final class AnnotationController
             'url' => 'required|string|max:2048',
         ]);
 
-        $annotation = Store::createAnnotation($sessionId, $data);
+        $annotation = Store::createAnnotation($data);
 
         return response()->json($annotation, 201);
     }
@@ -38,8 +43,6 @@ final class AnnotationController
         $data = $request->validate([
             'status' => 'sometimes|string|in:pending,acknowledged,resolved,dismissed',
             'comment' => 'sometimes|string|max:2000',
-            'intent' => 'sometimes|string|in:fix,change,question,approve',
-            'severity' => 'sometimes|string|in:blocking,important,suggestion',
             'resolved_by' => 'sometimes|string|in:human,agent',
         ]);
 
