@@ -30,13 +30,10 @@ function headers() {
   return h;
 }
 function toCamelCase(obj) {
-  return toCamel(obj);
-}
-function toCamel(obj) {
   const out = {};
   for (const [k, v] of Object.entries(obj)) {
     const camel = k.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-    out[camel] = Array.isArray(v) ? v.map((item) => item && typeof item === "object" && !Array.isArray(item) ? toCamel(item) : item) : v && typeof v === "object" && !Array.isArray(v) ? toCamel(v) : v;
+    out[camel] = Array.isArray(v) ? v.map((item) => item && typeof item === "object" && !Array.isArray(item) ? toCamelCase(item) : item) : v && typeof v === "object" && !Array.isArray(v) ? toCamelCase(v) : v;
   }
   return out;
 }
@@ -52,30 +49,14 @@ var InstrucktApi = class {
   constructor(endpoint) {
     this.endpoint = endpoint;
   }
-  async createSession(url) {
-    const res = await fetch(`${this.endpoint}/sessions`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ url })
-    });
-    if (!res.ok) throw new Error(`instruckt: failed to create session (${res.status})`);
-    return toCamel(await res.json());
-  }
-  async getSession(sessionId) {
-    const res = await fetch(`${this.endpoint}/sessions/${sessionId}`, {
-      headers: { Accept: "application/json" }
-    });
-    if (!res.ok) throw new Error(`instruckt: failed to get session (${res.status})`);
-    return toCamel(await res.json());
-  }
-  async addAnnotation(sessionId, data) {
-    const res = await fetch(`${this.endpoint}/sessions/${sessionId}/annotations`, {
+  async addAnnotation(data) {
+    const res = await fetch(`${this.endpoint}/annotations`, {
       method: "POST",
       headers: headers(),
       body: JSON.stringify(toSnake(data))
     });
     if (!res.ok) throw new Error(`instruckt: failed to add annotation (${res.status})`);
-    return toCamel(await res.json());
+    return toCamelCase(await res.json());
   }
   async updateAnnotation(annotationId, data) {
     const res = await fetch(`${this.endpoint}/annotations/${annotationId}`, {
@@ -84,7 +65,7 @@ var InstrucktApi = class {
       body: JSON.stringify(toSnake(data))
     });
     if (!res.ok) throw new Error(`instruckt: failed to update annotation (${res.status})`);
-    return toCamel(await res.json());
+    return toCamelCase(await res.json());
   }
   async addReply(annotationId, content, role = "human") {
     const res = await fetch(`${this.endpoint}/annotations/${annotationId}/reply`, {
@@ -93,36 +74,7 @@ var InstrucktApi = class {
       body: JSON.stringify({ role, content })
     });
     if (!res.ok) throw new Error(`instruckt: failed to add reply (${res.status})`);
-    return toCamel(await res.json());
-  }
-};
-
-// src/sse.ts
-var InstrucktSSE = class {
-  constructor(endpoint, sessionId, onUpdate) {
-    this.endpoint = endpoint;
-    this.sessionId = sessionId;
-    this.onUpdate = onUpdate;
-    this.source = null;
-  }
-  connect() {
-    if (this.source) return;
-    this.source = new EventSource(`${this.endpoint}/sessions/${this.sessionId}/events`);
-    this.source.addEventListener("annotation.updated", (e) => {
-      try {
-        const raw = JSON.parse(e.data);
-        const annotation = toCamelCase(raw);
-        this.onUpdate(annotation);
-      } catch (e2) {
-      }
-    });
-    this.source.onerror = () => {
-    };
-  }
-  disconnect() {
-    var _a;
-    (_a = this.source) == null ? void 0 : _a.close();
-    this.source = null;
+    return toCamelCase(await res.json());
   }
 };
 
@@ -1006,22 +958,18 @@ function getContext4(el) {
 }
 
 // src/instruckt.ts
-var SESSION_KEY = "instruckt_session";
 var Instruckt = class {
   constructor(config) {
-    this.sse = null;
     this.toolbar = null;
     this.highlight = null;
     this.popup = null;
     this.markers = null;
     this.annotations = [];
-    this.session = null;
     this.isAnnotating = false;
     this.isFrozen = false;
     this.frozenStyleEl = null;
     this.rafId = null;
     this.pendingMouseTarget = null;
-    this.mutationObserver = null;
     // ── Event listeners ───────────────────────────────────────────
     this.boundMouseMove = (e) => {
       this.pendingMouseTarget = e.target;
@@ -1079,11 +1027,9 @@ var Instruckt = class {
     }, config);
     this.api = new InstrucktApi(config.endpoint);
     this.boundKeydown = this.onKeydown.bind(this);
-    this.boundScroll = this.onScrollResize.bind(this);
-    this.boundResize = this.onScrollResize.bind(this);
     this.init();
   }
-  async init() {
+  init() {
     injectGlobalStyles();
     if (this.config.theme !== "auto") {
       document.documentElement.setAttribute("data-instruckt-theme", this.config.theme);
@@ -1097,42 +1043,6 @@ var Instruckt = class {
     this.popup = new AnnotationPopup();
     this.markers = new AnnotationMarkers((annotation) => this.onMarkerClick(annotation));
     document.addEventListener("keydown", this.boundKeydown);
-    window.addEventListener("scroll", this.boundScroll, { passive: true });
-    window.addEventListener("resize", this.boundResize, { passive: true });
-    this.setupMutationObserver();
-    await this.connectSession();
-  }
-  // ── Session ───────────────────────────────────────────────────
-  async connectSession() {
-    var _a, _b, _c, _d;
-    const stored = sessionStorage.getItem(SESSION_KEY);
-    if (stored) {
-      try {
-        const data = await this.api.getSession(stored);
-        this.session = data;
-        this.annotations = (_a = data.annotations) != null ? _a : [];
-        this.syncMarkersFromAnnotations();
-        (_b = this.toolbar) == null ? void 0 : _b.setAnnotationCount(this.pendingCount());
-        this.connectSSE(stored);
-        return;
-      } catch (e) {
-        sessionStorage.removeItem(SESSION_KEY);
-      }
-    }
-    try {
-      this.session = await this.api.createSession(window.location.href);
-      sessionStorage.setItem(SESSION_KEY, this.session.id);
-      (_d = (_c = this.config).onSessionCreate) == null ? void 0 : _d.call(_c, this.session);
-      this.connectSSE(this.session.id);
-    } catch (e) {
-      console.warn("[instruckt] Could not connect to server \u2014 running offline.");
-    }
-  }
-  connectSSE(sessionId) {
-    this.sse = new InstrucktSSE(this.config.endpoint, sessionId, (annotation) => {
-      this.onAnnotationUpdated(annotation);
-    });
-    this.sse.connect();
   }
   // ── Annotate mode ─────────────────────────────────────────────
   setAnnotating(active) {
@@ -1210,13 +1120,6 @@ var Instruckt = class {
   // ── Submit ────────────────────────────────────────────────────
   async submitAnnotation(pending, comment) {
     var _a, _b, _c, _d;
-    if (!this.session) {
-      await this.connectSession();
-      if (!this.session) {
-        console.warn("[instruckt] No session \u2014 annotation not saved.");
-        return;
-      }
-    }
     const payload = {
       x: pending.x / window.innerWidth * 100,
       y: pending.y + window.scrollY,
@@ -1233,11 +1136,12 @@ var Instruckt = class {
       url: window.location.href
     };
     try {
-      const annotation = await this.api.addAnnotation(this.session.id, payload);
+      const annotation = await this.api.addAnnotation(payload);
       this.annotations.push(annotation);
       (_a = this.markers) == null ? void 0 : _a.upsert(annotation, this.annotations.length);
       (_b = this.toolbar) == null ? void 0 : _b.setAnnotationCount(this.pendingCount());
       (_d = (_c = this.config).onAnnotationAdd) == null ? void 0 : _d.call(_c, annotation);
+      this.copyAnnotations();
     } catch (err) {
       console.error("[instruckt] Failed to save annotation:", err);
     }
@@ -1264,9 +1168,8 @@ var Instruckt = class {
       }
     });
   }
-  // ── SSE updates ───────────────────────────────────────────────
   onAnnotationUpdated(updated) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c;
     const idx = this.annotations.findIndex((a) => a.id === updated.id);
     if (idx >= 0) {
       this.annotations[idx] = updated;
@@ -1276,25 +1179,6 @@ var Instruckt = class {
       (_b = this.markers) == null ? void 0 : _b.upsert(updated, this.annotations.length);
     }
     (_c = this.toolbar) == null ? void 0 : _c.setAnnotationCount(this.pendingCount());
-    (_e = (_d = this.config).onAnnotationResolve) == null ? void 0 : _e.call(_d, updated);
-  }
-  // ── MutationObserver — handles Livewire/Vue DOM teardown ──────
-  setupMutationObserver() {
-    this.mutationObserver = new MutationObserver((mutations) => {
-      var _a;
-      const anyRemoved = mutations.some((m) => m.removedNodes.length > 0);
-      if (!anyRemoved) return;
-      (_a = this.markers) == null ? void 0 : _a.reposition(this.annotations);
-    });
-    this.mutationObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-  // ── Scroll/resize — reposition markers ───────────────────────
-  onScrollResize() {
-    var _a;
-    (_a = this.markers) == null ? void 0 : _a.reposition(this.annotations);
   }
   // ── Keyboard ──────────────────────────────────────────────────
   onKeydown(e) {
@@ -1323,12 +1207,6 @@ var Instruckt = class {
   pendingCount() {
     return this.annotations.filter((a) => a.status === "pending" || a.status === "acknowledged").length;
   }
-  syncMarkersFromAnnotations() {
-    this.annotations.forEach((a, i) => {
-      var _a;
-      return (_a = this.markers) == null ? void 0 : _a.upsert(a, i + 1);
-    });
-  }
   // ── Copy / export ─────────────────────────────────────────────
   copyAnnotations() {
     const md = this.exportMarkdown();
@@ -1355,17 +1233,13 @@ No open annotations.`;
       ""
     ];
     pending.forEach((a, i) => {
-      const severityIcon = a.severity === "blocking" ? "\u{1F534}" : a.severity === "important" ? "\u{1F7E0}" : "\u{1F7E1}";
-      const intentLabel = a.intent === "fix" ? "Fix" : a.intent === "change" ? "Change" : a.intent === "question" ? "Question" : "Approve";
-      lines.push(`### ${i + 1}. ${a.element} \u2014 ${intentLabel} ${severityIcon}`);
+      lines.push(`### ${i + 1}. ${a.element}`);
       lines.push("");
       lines.push(a.comment);
       lines.push("");
       lines.push(`**Selector**: \`${a.elementPath}\``);
       if (a.framework) {
-        const fw = a.framework;
-        const label = fw.framework === "livewire" ? `Livewire \u2014 ${fw.component}` : fw.framework === "vue" ? `Vue \u2014 ${fw.component}` : fw.framework === "react" ? `React \u2014 ${fw.component}` : fw.component;
-        lines.push(`**Component**: ${label}`);
+        lines.push(`**Component**: ${a.framework.component}`);
       }
       if (a.selectedText) lines.push(`**Selected text**: "${a.selectedText}"`);
       if (a.thread && a.thread.length > 0) {
@@ -1385,22 +1259,15 @@ No open annotations.`;
   getAnnotations() {
     return [...this.annotations];
   }
-  getSession() {
-    return this.session;
-  }
   destroy() {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d;
     this.setAnnotating(false);
     this.setFrozen(false);
     document.removeEventListener("keydown", this.boundKeydown);
-    window.removeEventListener("scroll", this.boundScroll);
-    window.removeEventListener("resize", this.boundResize);
-    (_a = this.mutationObserver) == null ? void 0 : _a.disconnect();
-    (_b = this.sse) == null ? void 0 : _b.disconnect();
-    (_c = this.toolbar) == null ? void 0 : _c.destroy();
-    (_d = this.highlight) == null ? void 0 : _d.destroy();
-    (_e = this.popup) == null ? void 0 : _e.destroy();
-    (_f = this.markers) == null ? void 0 : _f.destroy();
+    (_a = this.toolbar) == null ? void 0 : _a.destroy();
+    (_b = this.highlight) == null ? void 0 : _b.destroy();
+    (_c = this.popup) == null ? void 0 : _c.destroy();
+    (_d = this.markers) == null ? void 0 : _d.destroy();
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
   }
 };

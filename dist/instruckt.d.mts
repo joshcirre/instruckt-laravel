@@ -1,7 +1,6 @@
 type AnnotationIntent = 'fix' | 'change' | 'question' | 'approve';
 type AnnotationSeverity = 'blocking' | 'important' | 'suggestion';
 type AnnotationStatus = 'pending' | 'acknowledged' | 'resolved' | 'dismissed';
-type SessionStatus = 'active' | 'approved' | 'closed';
 interface ThreadMessage {
     id: string;
     role: 'human' | 'agent';
@@ -23,7 +22,6 @@ interface BoundingBox {
 }
 interface Annotation {
     id: string;
-    sessionId: string;
     url: string;
     x: number;
     y: number;
@@ -34,8 +32,6 @@ interface Annotation {
     boundingBox: BoundingBox;
     selectedText?: string;
     nearbyText?: string;
-    isMultiSelect?: boolean;
-    elementBoundingBoxes?: BoundingBox[];
     intent: AnnotationIntent;
     severity: AnnotationSeverity;
     status: AnnotationStatus;
@@ -45,14 +41,6 @@ interface Annotation {
     updatedAt?: string;
     resolvedAt?: string;
     resolvedBy?: 'human' | 'agent';
-    _syncedTo?: string;
-}
-interface Session {
-    id: string;
-    url: string;
-    status: SessionStatus;
-    createdAt: string;
-    updatedAt?: string;
 }
 interface InstrucktConfig {
     /** URL to POST annotations to. Default: '/instruckt' */
@@ -66,34 +54,26 @@ interface InstrucktConfig {
     /** Callbacks */
     onAnnotationAdd?: (annotation: Annotation) => void;
     onAnnotationResolve?: (annotation: Annotation) => void;
-    onSessionCreate?: (session: Session) => void;
 }
 
-type AnnotationPayload = Omit<Annotation, 'id' | 'sessionId' | 'status' | 'thread' | 'createdAt' | '_syncedTo'>;
+type AnnotationPayload = Omit<Annotation, 'id' | 'status' | 'thread' | 'createdAt'>;
 
 declare class Instruckt {
     private config;
     private api;
-    private sse;
     private toolbar;
     private highlight;
     private popup;
     private markers;
     private annotations;
-    private session;
     private isAnnotating;
     private isFrozen;
     private frozenStyleEl;
     private rafId;
     private pendingMouseTarget;
-    private mutationObserver;
     private boundKeydown;
-    private boundScroll;
-    private boundResize;
     constructor(config: InstrucktConfig);
     private init;
-    private connectSession;
-    private connectSSE;
     private setAnnotating;
     private setFrozen;
     private boundMouseMove;
@@ -106,15 +86,11 @@ declare class Instruckt {
     private submitAnnotation;
     private onMarkerClick;
     private onAnnotationUpdated;
-    private setupMutationObserver;
-    private onScrollResize;
     private onKeydown;
     private pendingCount;
-    private syncMarkersFromAnnotations;
     private copyAnnotations;
     exportMarkdown(): string;
     getAnnotations(): Annotation[];
-    getSession(): Session | null;
     destroy(): void;
 }
 
@@ -130,4 +106,4 @@ declare class Instruckt {
  */
 declare function init(config: InstrucktConfig): Instruckt;
 
-export { type Annotation, type AnnotationIntent, type AnnotationPayload, type AnnotationSeverity, type AnnotationStatus, type FrameworkContext, Instruckt, type InstrucktConfig, type Session, init };
+export { type Annotation, type AnnotationIntent, type AnnotationPayload, type AnnotationSeverity, type AnnotationStatus, type FrameworkContext, Instruckt, type InstrucktConfig, init };

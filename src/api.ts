@@ -1,4 +1,4 @@
-import type { Annotation, Session } from './types'
+import type { Annotation } from './types'
 
 /** Read Laravel's XSRF-TOKEN cookie for CSRF protection */
 function getCsrfToken(): string {
@@ -18,16 +18,12 @@ function headers(): Record<string, string> {
 
 /** Convert snake_case API response to camelCase for JS types */
 export function toCamelCase(obj: Record<string, unknown>): Record<string, unknown> {
-  return toCamel(obj)
-}
-
-function toCamel(obj: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(obj)) {
     const camel = k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
     out[camel] = Array.isArray(v)
-      ? v.map(item => (item && typeof item === 'object' && !Array.isArray(item)) ? toCamel(item as Record<string, unknown>) : item)
-      : (v && typeof v === 'object' && !Array.isArray(v)) ? toCamel(v as Record<string, unknown>) : v
+      ? v.map(item => (item && typeof item === 'object' && !Array.isArray(item)) ? toCamelCase(item as Record<string, unknown>) : item)
+      : (v && typeof v === 'object' && !Array.isArray(v)) ? toCamelCase(v as Record<string, unknown>) : v
   }
   return out
 }
@@ -44,43 +40,25 @@ function toSnake(obj: Record<string, unknown>): Record<string, unknown> {
 
 export type AnnotationPayload = Omit<
   Annotation,
-  'id' | 'sessionId' | 'status' | 'thread' | 'createdAt' | '_syncedTo'
+  'id' | 'status' | 'thread' | 'createdAt'
 >
 
 export class InstrucktApi {
   constructor(private readonly endpoint: string) {}
 
-  async createSession(url: string): Promise<Session> {
-    const res = await fetch(`${this.endpoint}/sessions`, {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify({ url }),
-    })
-    if (!res.ok) throw new Error(`instruckt: failed to create session (${res.status})`)
-    return toCamel(await res.json()) as unknown as Session
-  }
-
-  async getSession(sessionId: string): Promise<Session & { annotations: Annotation[] }> {
-    const res = await fetch(`${this.endpoint}/sessions/${sessionId}`, {
-      headers: { Accept: 'application/json' },
-    })
-    if (!res.ok) throw new Error(`instruckt: failed to get session (${res.status})`)
-    return toCamel(await res.json()) as unknown as Session & { annotations: Annotation[] }
-  }
-
-  async addAnnotation(sessionId: string, data: AnnotationPayload): Promise<Annotation> {
-    const res = await fetch(`${this.endpoint}/sessions/${sessionId}/annotations`, {
+  async addAnnotation(data: AnnotationPayload): Promise<Annotation> {
+    const res = await fetch(`${this.endpoint}/annotations`, {
       method: 'POST',
       headers: headers(),
       body: JSON.stringify(toSnake(data as unknown as Record<string, unknown>)),
     })
     if (!res.ok) throw new Error(`instruckt: failed to add annotation (${res.status})`)
-    return toCamel(await res.json()) as unknown as Annotation
+    return toCamelCase(await res.json()) as unknown as Annotation
   }
 
   async updateAnnotation(
     annotationId: string,
-    data: Partial<Pick<Annotation, 'status' | 'comment' | 'intent' | 'severity'>>,
+    data: Partial<Pick<Annotation, 'status' | 'comment'>>,
   ): Promise<Annotation> {
     const res = await fetch(`${this.endpoint}/annotations/${annotationId}`, {
       method: 'PATCH',
@@ -88,7 +66,7 @@ export class InstrucktApi {
       body: JSON.stringify(toSnake(data as unknown as Record<string, unknown>)),
     })
     if (!res.ok) throw new Error(`instruckt: failed to update annotation (${res.status})`)
-    return toCamel(await res.json()) as unknown as Annotation
+    return toCamelCase(await res.json()) as unknown as Annotation
   }
 
   async addReply(annotationId: string, content: string, role: 'human' | 'agent' = 'human'): Promise<Annotation> {
@@ -98,6 +76,6 @@ export class InstrucktApi {
       body: JSON.stringify({ role, content }),
     })
     if (!res.ok) throw new Error(`instruckt: failed to add reply (${res.status})`)
-    return toCamel(await res.json()) as unknown as Annotation
+    return toCamelCase(await res.json()) as unknown as Annotation
   }
 }

@@ -1,7 +1,6 @@
 export type AnnotationIntent = 'fix' | 'change' | 'question' | 'approve'
 export type AnnotationSeverity = 'blocking' | 'important' | 'suggestion'
 export type AnnotationStatus = 'pending' | 'acknowledged' | 'resolved' | 'dismissed'
-export type SessionStatus = 'active' | 'approved' | 'closed'
 
 export interface ThreadMessage {
   id: string
@@ -29,9 +28,7 @@ export interface BoundingBox {
 
 export interface Annotation {
   id: string
-  sessionId: string
   url: string
-  // Position as % of viewport width (x) and px from top (y)
   x: number
   y: number
   comment: string
@@ -41,8 +38,6 @@ export interface Annotation {
   boundingBox: BoundingBox
   selectedText?: string
   nearbyText?: string
-  isMultiSelect?: boolean
-  elementBoundingBoxes?: BoundingBox[]
   intent: AnnotationIntent
   severity: AnnotationSeverity
   status: AnnotationStatus
@@ -52,16 +47,6 @@ export interface Annotation {
   updatedAt?: string
   resolvedAt?: string
   resolvedBy?: 'human' | 'agent'
-  // Local tracking — not sent to server
-  _syncedTo?: string
-}
-
-export interface Session {
-  id: string
-  url: string
-  status: SessionStatus
-  createdAt: string
-  updatedAt?: string
 }
 
 export interface InstrucktConfig {
@@ -76,7 +61,6 @@ export interface InstrucktConfig {
   /** Callbacks */
   onAnnotationAdd?: (annotation: Annotation) => void
   onAnnotationResolve?: (annotation: Annotation) => void
-  onSessionCreate?: (session: Session) => void
 }
 
 export interface PendingAnnotation {

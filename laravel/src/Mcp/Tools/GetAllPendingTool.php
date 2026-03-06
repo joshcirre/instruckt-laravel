@@ -11,7 +11,7 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('Get all pending annotations across every session. Use for a global view of unresolved user feedback.')]
+#[Description('Get all pending annotations — unresolved user feedback from the browser.')]
 final class GetAllPendingTool extends Tool
 {
     public function handle(Request $request): Response
