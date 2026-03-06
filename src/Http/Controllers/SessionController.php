@@ -6,50 +6,39 @@ namespace Instruckt\Laravel\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Instruckt\Laravel\Models\InstrucktSession;
+use Instruckt\Laravel\Store;
 
 final class SessionController
 {
     public function index(): JsonResponse
     {
-        $sessions = InstrucktSession::query()
-            ->latest()
-            ->limit(100)
-            ->get();
-
-        return response()->json($sessions);
+        return response()->json(Store::listSessions());
     }
 
     public function store(Request $request): JsonResponse
     {
         $request->validate(['url' => 'required|string|max:2048']);
 
-        $session = InstrucktSession::query()->create([
-            'url' => $request->input('url'),
-        ]);
+        $session = Store::createSession($request->input('url'));
 
         return response()->json($session, 201);
     }
 
     public function show(string $id): JsonResponse
     {
-        $session = InstrucktSession::query()->findOrFail($id);
+        $session = Store::getSessionOrFail($id);
+        $session['annotations'] = Store::getSessionAnnotations($id);
 
-        return response()->json([
-            ...$session->toArray(),
-            'annotations' => $session->annotations()->oldest()->get(),
-        ]);
+        return response()->json($session);
     }
 
     public function events(string $id): \Symfony\Component\HttpFoundation\StreamedResponse
     {
-        $session = InstrucktSession::query()->findOrFail($id);
+        Store::getSessionOrFail($id);
 
-        return response()->stream(function () use ($session) {
-            // Hard 60-second timeout — EventSource auto-reconnects.
-            // Each reconnect sends Last-Event-ID so we don't miss updates.
+        return response()->stream(function () use ($id) {
             $deadline = time() + 60;
-            $lastChecked = now()->subSecond(); // catch any updates from just before connect
+            $lastChecked = now()->subSecond()->toIso8601String();
 
             while (time() < $deadline) {
                 if (connection_aborted()) {
@@ -57,21 +46,18 @@ final class SessionController
                 }
 
                 $cutoff = $lastChecked;
-                $lastChecked = now();
+                $lastChecked = now()->toIso8601String();
 
-                // Emit any annotations updated since last check (new OR status-changed)
-                $annotations = $session->annotations()
-                    ->where('updated_at', '>=', $cutoff)
-                    ->get();
+                $updated = Store::getRecentlyUpdatedAnnotations($id, $cutoff);
 
-                foreach ($annotations as $annotation) {
+                foreach ($updated as $annotation) {
                     echo 'event: annotation.updated' . PHP_EOL;
-                    echo 'id: ' . $annotation->id . PHP_EOL;
-                    echo 'data: ' . $annotation->toJson() . PHP_EOL;
+                    echo 'id: ' . $annotation['id'] . PHP_EOL;
+                    echo 'data: ' . json_encode($annotation) . PHP_EOL;
                     echo PHP_EOL;
                 }
 
-                if ($annotations->isNotEmpty()) {
+                if (! empty($updated)) {
                     ob_flush();
                     flush();
                 }
@@ -79,7 +65,6 @@ final class SessionController
                 sleep(1);
             }
 
-            // Signal client to reconnect
             echo ': reconnect' . PHP_EOL . PHP_EOL;
             ob_flush();
             flush();

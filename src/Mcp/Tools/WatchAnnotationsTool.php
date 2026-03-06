@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Instruckt\Laravel\Mcp\Tools;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
-use Instruckt\Laravel\Models\InstrucktAnnotation;
+use Instruckt\Laravel\Store;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -28,25 +28,17 @@ final class WatchAnnotationsTool extends Tool
         $batchDeadline = null;
 
         while (true) {
-            $query = InstrucktAnnotation::query()
-                ->where('status', 'pending')
-                ->oldest();
+            $annotations = Store::getPendingAnnotations($sessionId);
 
-            if ($sessionId) {
-                $query->where('session_id', $sessionId);
-            }
-
-            $annotations = $query->get();
-
-            if ($annotations->isNotEmpty()) {
+            if (! empty($annotations)) {
                 if ($batchDeadline === null) {
                     $batchDeadline = time() + $batchWindow;
                 }
 
                 if (time() >= $batchDeadline) {
                     return Response::text(json_encode([
-                        'count' => $annotations->count(),
-                        'annotations' => $annotations->toArray(),
+                        'count' => count($annotations),
+                        'annotations' => $annotations,
                         'timed_out' => false,
                     ], JSON_PRETTY_PRINT));
                 }
@@ -54,10 +46,10 @@ final class WatchAnnotationsTool extends Tool
 
             if (time() >= $deadline) {
                 return Response::text(json_encode([
-                    'count' => $annotations->count(),
-                    'annotations' => $annotations->toArray(),
-                    'timed_out' => $annotations->isEmpty(),
-                    'message' => $annotations->isEmpty()
+                    'count' => count($annotations),
+                    'annotations' => $annotations,
+                    'timed_out' => empty($annotations),
+                    'message' => empty($annotations)
                         ? 'No new annotations within timeout. Call again to continue watching.'
                         : null,
                 ], JSON_PRETTY_PRINT));

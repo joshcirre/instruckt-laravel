@@ -74,10 +74,6 @@ final class InstrucktServiceProvider extends ServiceProvider
         ], 'instruckt-config');
 
         $this->publishes([
-            __DIR__ . '/../database/migrations' => database_path('migrations'),
-        ], 'instruckt-migrations');
-
-        $this->publishes([
             __DIR__ . '/../dist' => public_path('vendor/instruckt'),
         ], 'instruckt-assets');
     }

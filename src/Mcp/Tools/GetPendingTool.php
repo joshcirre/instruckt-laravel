@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Instruckt\Laravel\Mcp\Tools;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
-use Instruckt\Laravel\Models\InstrucktSession;
+use Instruckt\Laravel\Store;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -16,13 +16,14 @@ final class GetPendingTool extends Tool
 {
     public function handle(Request $request): Response
     {
-        $session = InstrucktSession::query()->findOrFail($request->get('session_id'));
-        $annotations = $session->pendingAnnotations()->get();
+        $sessionId = $request->get('session_id');
+        Store::getSessionOrFail($sessionId);
+        $annotations = Store::getPendingAnnotations($sessionId);
 
         return Response::text(json_encode([
-            'session_id' => $session->id,
-            'count' => $annotations->count(),
-            'annotations' => $annotations->toArray(),
+            'session_id' => $sessionId,
+            'count' => count($annotations),
+            'annotations' => $annotations,
         ], JSON_PRETTY_PRINT));
     }
 

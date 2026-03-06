@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Instruckt\Laravel\Mcp\Tools;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
-use Instruckt\Laravel\Models\InstrucktAnnotation;
+use Instruckt\Laravel\Store;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -16,15 +16,11 @@ final class GetAllPendingTool extends Tool
 {
     public function handle(Request $request): Response
     {
-        $annotations = InstrucktAnnotation::query()
-            ->whereIn('status', ['pending', 'acknowledged'])
-            ->with('session:id,url,status')
-            ->oldest()
-            ->get();
+        $annotations = Store::getPendingAnnotations();
 
         return Response::text(json_encode([
-            'count' => $annotations->count(),
-            'annotations' => $annotations->toArray(),
+            'count' => count($annotations),
+            'annotations' => $annotations,
         ], JSON_PRETTY_PRINT));
     }
 

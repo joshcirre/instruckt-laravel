@@ -14,7 +14,7 @@ final class InstallCommand extends Command
         {--skip-skill : Skip installing the agent skill}
         {--skip-toolbar : Skip injecting the toolbar into layouts}';
 
-    protected $description = 'Install instruckt — publish config, run migrations, configure agents, inject toolbar';
+    protected $description = 'Install instruckt — publish config, configure agents, inject toolbar';
 
     /** @var array<string, array{name: string, mcp_path: string, mcp_key: string, skill_path: string, config: callable}> */
     private array $agents = [];
@@ -27,9 +27,7 @@ final class InstallCommand extends Command
         $this->newLine();
 
         $this->call('vendor:publish', ['--tag' => 'instruckt-config', '--force' => false]);
-        $this->call('vendor:publish', ['--tag' => 'instruckt-migrations', '--force' => false]);
         $this->call('vendor:publish', ['--tag' => 'instruckt-assets', '--force' => true]);
-        $this->call('migrate', ['--force' => false]);
 
         $framework = $this->detectFramework();
         $this->newLine();

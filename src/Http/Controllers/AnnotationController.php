@@ -6,15 +6,12 @@ namespace Instruckt\Laravel\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Instruckt\Laravel\Models\InstrucktAnnotation;
-use Instruckt\Laravel\Models\InstrucktSession;
+use Instruckt\Laravel\Store;
 
 final class AnnotationController
 {
     public function store(Request $request, string $sessionId): JsonResponse
     {
-        $session = InstrucktSession::query()->findOrFail($sessionId);
-
         $data = $request->validate([
             'x' => 'required|numeric',
             'y' => 'required|numeric',
@@ -31,15 +28,13 @@ final class AnnotationController
             'url' => 'required|string|max:2048',
         ]);
 
-        $annotation = $session->annotations()->create($data);
+        $annotation = Store::createAnnotation($sessionId, $data);
 
         return response()->json($annotation, 201);
     }
 
     public function update(Request $request, string $id): JsonResponse
     {
-        $annotation = InstrucktAnnotation::query()->findOrFail($id);
-
         $data = $request->validate([
             'status' => 'sometimes|string|in:pending,acknowledged,resolved,dismissed',
             'comment' => 'sometimes|string|max:2000',
@@ -49,29 +44,28 @@ final class AnnotationController
         ]);
 
         if (isset($data['status']) && in_array($data['status'], ['resolved', 'dismissed'], true)) {
-            $data['resolved_at'] = now();
+            $data['resolved_at'] = now()->toIso8601String();
             $data['resolved_by'] = $data['resolved_by'] ?? 'agent';
         }
 
-        $annotation->update($data);
+        $annotation = Store::updateAnnotation($id, $data);
 
-        return response()->json($annotation->fresh());
+        return response()->json($annotation);
     }
 
     public function reply(Request $request, string $id): JsonResponse
     {
-        $annotation = InstrucktAnnotation::query()->findOrFail($id);
-
         $request->validate([
             'role' => 'required|string|in:human,agent',
             'content' => 'required|string|max:2000',
         ]);
 
-        $annotation->addThreadMessage(
+        $annotation = Store::addThreadMessage(
+            $id,
             $request->input('role'),
             $request->input('content'),
         );
 
-        return response()->json($annotation->fresh());
+        return response()->json($annotation);
     }
 }
