@@ -41,7 +41,7 @@ The install command automatically detects your AI agent and configures MCP. If y
   "mcpServers": {
     "instruckt": {
       "command": "php",
-      "args": ["artisan", "mcp:serve", "instruckt"]
+      "args": ["artisan", "mcp:start", "instruckt"]
     }
   }
 }
@@ -100,8 +100,9 @@ The `<x-instruckt-toolbar />` component accepts optional attributes:
 1. The Blade component loads `instruckt.iife.js` and initializes the annotation UI
 2. Users click elements and leave feedback
 3. Annotations auto-copy as structured markdown to the clipboard for pasting into AI agents
-4. Annotations are also persisted to `_instruckt/annotations.json` via API routes
-5. AI agents can read pending annotations via MCP tools
+4. Annotations are persisted to `_instruckt/annotations.json` via API routes
+5. On page reload (including Vite rebuilds), annotations are loaded from the API and markers reappear
+6. AI agents can read pending annotations via MCP tools and resolve/dismiss them after fixing
 
 ## API Routes
 
