@@ -46,6 +46,15 @@ export type AnnotationPayload = Omit<
 export class InstrucktApi {
   constructor(private readonly endpoint: string) {}
 
+  async getAnnotations(): Promise<Annotation[]> {
+    const res = await fetch(`${this.endpoint}/annotations`, {
+      headers: headers(),
+    })
+    if (!res.ok) throw new Error(`instruckt: failed to load annotations (${res.status})`)
+    const raw: Record<string, unknown>[] = await res.json()
+    return raw.map(r => toCamelCase(r) as unknown as Annotation)
+  }
+
   async addAnnotation(data: AnnotationPayload): Promise<Annotation> {
     const res = await fetch(`${this.endpoint}/annotations`, {
       method: 'POST',

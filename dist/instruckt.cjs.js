@@ -1,6 +1,8 @@
 "use strict";
 var __defProp = Object.defineProperty;
+var __defProps = Object.defineProperties;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getOwnPropSymbols = Object.getOwnPropertySymbols;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
@@ -17,6 +19,7 @@ var __spreadValues = (a, b) => {
     }
   return a;
 };
+var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -72,6 +75,14 @@ function toSnake(obj) {
 var InstrucktApi = class {
   constructor(endpoint) {
     this.endpoint = endpoint;
+  }
+  async getAnnotations() {
+    const res = await fetch(`${this.endpoint}/annotations`, {
+      headers: headers()
+    });
+    if (!res.ok) throw new Error(`instruckt: failed to load annotations (${res.status})`);
+    const raw = await res.json();
+    return raw.map((r) => toCamelCase(r));
   }
   async addAnnotation(data) {
     const res = await fetch(`${this.endpoint}/annotations`, {
@@ -199,6 +210,31 @@ var TOOLBAR_CSS = (
 
 .danger-btn { color: var(--ik-muted); opacity: .6; }
 .danger-btn:hover { opacity: 1; color: #ef4444; }
+
+.clear-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.clear-all-btn {
+  display: none;
+  position: absolute;
+  right: 100%;
+  top: 0;
+  background: var(--ik-bg);
+  box-shadow: var(--ik-shadow);
+  border-radius: 8px;
+}
+/* Invisible bridge so hover doesn't break crossing the gap */
+.clear-all-btn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 100%;
+  width: 6px;
+  height: 100%;
+}
+.clear-wrap:hover .clear-all-btn { display: flex; align-items: center; justify-content: center; }
 
 .fab {
   display: flex;
@@ -466,11 +502,24 @@ var Toolbar = class {
         this.copyBtn.innerHTML = ICONS.copy;
       }, 1200);
     });
-    const clearBtn = this.makeBtn(ICONS.clear, "Clear all annotations on this page", () => {
+    const clearWrap = document.createElement("div");
+    clearWrap.className = "clear-wrap";
+    const clearBtn = this.makeBtn(ICONS.clear, "Clear this page (X)", () => {
       var _a2, _b;
-      (_b = (_a2 = this.callbacks).onClearAll) == null ? void 0 : _b.call(_a2);
+      (_b = (_a2 = this.callbacks).onClearPage) == null ? void 0 : _b.call(_a2);
     });
     clearBtn.classList.add("danger-btn");
+    const clearAllBtn = this.makeBtn(
+      `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`,
+      "Clear ALL annotations across every page",
+      () => {
+        var _a2, _b;
+        return (_b = (_a2 = this.callbacks).onClearAll) == null ? void 0 : _b.call(_a2);
+      }
+    );
+    clearAllBtn.classList.add("danger-btn", "clear-all-btn");
+    clearWrap.appendChild(clearBtn);
+    clearWrap.appendChild(clearAllBtn);
     const minimizeBtn = this.makeBtn(ICONS.minimize, "Minimize toolbar", () => {
       this.setMinimized(true);
     });
@@ -486,7 +535,7 @@ var Toolbar = class {
       this.freezeBtn,
       mkDiv(),
       this.copyBtn,
-      clearBtn,
+      clearWrap,
       mkDiv(),
       minimizeBtn
     );
@@ -502,6 +551,9 @@ var Toolbar = class {
       this.setMinimized(false);
     });
     this.shadow.appendChild(this.fab);
+    this.host.addEventListener("click", (e) => e.stopPropagation());
+    this.host.addEventListener("mousedown", (e) => e.stopPropagation());
+    this.host.addEventListener("pointerdown", (e) => e.stopPropagation());
     this.applyPosition();
     const root = (_a = document.getElementById("instruckt-root")) != null ? _a : document.body;
     root.appendChild(this.host);
@@ -681,6 +733,7 @@ var AnnotationPopup = class {
     this.destroy();
     this.host = document.createElement("div");
     this.host.setAttribute("data-instruckt", "popup");
+    this.stopHostPropagation(this.host);
     this.shadow = this.host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = POPUP_CSS;
@@ -691,7 +744,7 @@ var AnnotationPopup = class {
     const selText = pending.selectedText ? `<div class="selected-text">"${esc(pending.selectedText.slice(0, 80))}"</div>` : "";
     popup.innerHTML = `
       <div class="header">
-        <span class="element-tag" title="${esc(pending.elementPath)}">${esc(pending.elementName)}</span>
+        <span class="element-tag" title="${esc(pending.elementPath)}">${esc(pending.elementLabel)}</span>
         <button class="close-btn" title="Cancel (Esc)">\u2715</button>
       </div>
       ${fwBadge}${selText}
@@ -742,6 +795,7 @@ var AnnotationPopup = class {
     this.destroy();
     this.host = document.createElement("div");
     this.host.setAttribute("data-instruckt", "popup");
+    this.stopHostPropagation(this.host);
     this.shadow = this.host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = POPUP_CSS;
@@ -792,8 +846,19 @@ var AnnotationPopup = class {
     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
   }
   // ── Helpers ───────────────────────────────────────────────────
+  /** Prevent popup interactions from reaching page handlers (e.g. @click.outside) */
+  stopHostPropagation(host) {
+    for (const evt of ["click", "mousedown", "pointerdown"]) {
+      host.addEventListener(evt, (e) => e.stopPropagation());
+    }
+  }
   positionHost(x, y) {
     if (!this.host) return;
+    this.host.setAttribute("popover", "manual");
+    try {
+      this.host.showPopover();
+    } catch (e) {
+    }
     Object.assign(this.host.style, { position: "fixed", zIndex: "2147483647", left: "-9999px", top: "0" });
     requestAnimationFrame(() => {
       var _a, _b;
@@ -940,18 +1005,27 @@ function getElementSelector(el) {
   return path.join(" > ");
 }
 function getElementName(el) {
-  const wireModel = el.getAttribute("wire:model") || el.getAttribute("wire:click");
-  if (wireModel) return `wire:${wireModel.split(".")[0]}`;
-  const ariaLabel = el.getAttribute("aria-label");
-  if (ariaLabel) return ariaLabel;
-  const id = el.id;
-  if (id) return `#${id}`;
   const tag = el.tagName.toLowerCase();
-  const role = el.getAttribute("role");
-  if (role) return `${tag}[${role}]`;
+  const wireModel = el.getAttribute("wire:model") || el.getAttribute("wire:click");
+  if (wireModel) return `${tag}[wire:${wireModel.split(".")[0]}]`;
+  if (el.id) return `${tag}#${el.id}`;
   const firstClass = el.classList[0];
   if (firstClass) return `${tag}.${firstClass}`;
   return tag;
+}
+function getElementLabel(el) {
+  const tag = el.tagName.toLowerCase();
+  const text = (el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40);
+  const attrs = [];
+  if (el.id) attrs.push(`id="${el.id}"`);
+  const role = el.getAttribute("role");
+  if (role) attrs.push(`role="${role}"`);
+  const wireAttr = el.getAttribute("wire:model") || el.getAttribute("wire:click");
+  if (wireAttr) attrs.push(`wire:${el.hasAttribute("wire:model") ? "model" : "click"}="${wireAttr}"`);
+  const attrStr = attrs.length ? " " + attrs.join(" ") : "";
+  const openTag = `<${tag}${attrStr}>`;
+  if (text) return `${openTag} ${text}`;
+  return openTag;
 }
 function getNearbyText(el) {
   const text = (el.textContent || "").trim().replace(/\s+/g, " ");
@@ -1124,7 +1198,7 @@ function getContext4(el) {
 function pageKey() {
   return window.location.pathname;
 }
-var Instruckt = class {
+var _Instruckt = class _Instruckt {
   constructor(config) {
     this.toolbar = null;
     this.highlight = null;
@@ -1134,12 +1208,20 @@ var Instruckt = class {
     this.isAnnotating = false;
     this.isFrozen = false;
     this.frozenStyleEl = null;
+    this.frozenPopovers = [];
     this.rafId = null;
     this.pendingMouseTarget = null;
-    /** Block all clicks on the page when frozen (except instruckt UI) */
+    this.highlightLocked = false;
+    this.boundReposition = () => {
+      var _a;
+      (_a = this.markers) == null ? void 0 : _a.reposition(this.annotations);
+    };
+    this.freezeBlockEvents = ["click", "mousedown", "pointerdown", "pointerup", "mouseup", "touchstart", "touchend", "auxclick"];
+    this.freezePassiveEvents = ["focusin", "focusout", "blur", "pointerleave", "mouseleave", "mouseout"];
+    /** Block interactions on the page when frozen (except instruckt UI) */
     this.boundFreezeClick = (e) => {
-      const target = e.target;
-      if (this.isInstruckt(target)) return;
+      if (this.isInstruckt(e.target)) return;
+      if (this.isAnnotating && e.type === "click") return;
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -1149,13 +1231,23 @@ var Instruckt = class {
       e.stopPropagation();
       e.stopImmediatePropagation();
     };
+    /** Block focus/hover events that JS dropdowns use to auto-close.
+     *  Block ALL of these — even on instruckt elements — because frameworks
+     *  like Flux check if focusin target is contained in the popover and
+     *  close it if it's not (e.g. focus moved to our popup textarea). */
+    this.boundFreezePassive = (e) => {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    };
     // ── Event listeners ───────────────────────────────────────────
     this.boundMouseMove = (e) => {
+      if (this.highlightLocked) return;
       this.pendingMouseTarget = e.target;
       if (this.rafId === null) {
         this.rafId = requestAnimationFrame(() => {
           var _a, _b;
           this.rafId = null;
+          if (this.highlightLocked) return;
           if (this.pendingMouseTarget && !this.isInstruckt(this.pendingMouseTarget)) {
             (_a = this.highlight) == null ? void 0 : _a.show(this.pendingMouseTarget);
           } else {
@@ -1166,10 +1258,11 @@ var Instruckt = class {
     };
     this.boundMouseLeave = () => {
       var _a;
+      if (this.highlightLocked) return;
       (_a = this.highlight) == null ? void 0 : _a.hide();
     };
     this.boundClick = (e) => {
-      var _a, _b, _c;
+      var _a, _b, _c, _d;
       const target = e.target;
       if (this.isInstruckt(target)) return;
       e.preventDefault();
@@ -1178,6 +1271,7 @@ var Instruckt = class {
       const selectedText = ((_a = window.getSelection()) == null ? void 0 : _a.toString().trim()) || void 0;
       const elementPath = getElementSelector(target);
       const elementName = getElementName(target);
+      const elementLabel = getElementLabel(target);
       const cssClasses = getCssClasses(target);
       const nearbyText = getNearbyText(target) || void 0;
       const boundingBox = getPageBoundingBox(target);
@@ -1186,6 +1280,7 @@ var Instruckt = class {
         element: target,
         elementPath,
         elementName,
+        elementLabel,
         cssClasses,
         boundingBox,
         x: e.clientX,
@@ -1194,9 +1289,19 @@ var Instruckt = class {
         nearbyText,
         framework
       };
-      (_c = this.popup) == null ? void 0 : _c.showNew(pending, {
-        onSubmit: (result) => this.submitAnnotation(pending, result.comment),
+      (_c = this.highlight) == null ? void 0 : _c.show(target);
+      this.highlightLocked = true;
+      (_d = this.popup) == null ? void 0 : _d.showNew(pending, {
+        onSubmit: (result) => {
+          var _a2;
+          this.highlightLocked = false;
+          (_a2 = this.highlight) == null ? void 0 : _a2.hide();
+          this.submitAnnotation(pending, result.comment);
+        },
         onCancel: () => {
+          var _a2;
+          this.highlightLocked = false;
+          (_a2 = this.highlight) == null ? void 0 : _a2.hide();
         }
       });
     };
@@ -1222,14 +1327,21 @@ var Instruckt = class {
         this.setFrozen(frozen);
       },
       onCopy: () => this.copyAnnotations(),
-      onClearAll: () => this.clearAll(),
+      onClearPage: () => this.clearPage(),
+      onClearAll: () => this.clearEverything(),
       onMinimize: (min) => this.onMinimize(min)
     });
     this.highlight = new ElementHighlight();
     this.popup = new AnnotationPopup();
     this.markers = new AnnotationMarkers((annotation) => this.onMarkerClick(annotation));
     document.addEventListener("keydown", this.boundKeydown);
+    window.addEventListener("scroll", this.boundReposition, { passive: true });
+    window.addEventListener("resize", this.boundReposition, { passive: true });
     document.addEventListener("livewire:navigated", () => this.reattach());
+    window.addEventListener("popstate", () => {
+      setTimeout(() => this.reattach(), 0);
+    });
+    this.loadAnnotations();
     this.syncMarkers();
   }
   makeToolbarCallbacks() {
@@ -1241,34 +1353,31 @@ var Instruckt = class {
         this.setFrozen(frozen);
       },
       onCopy: () => this.copyAnnotations(),
-      onClearAll: () => this.clearAll(),
+      onClearPage: () => this.clearPage(),
+      onClearAll: () => this.clearEverything(),
       onMinimize: (min) => this.onMinimize(min)
     };
   }
   reattach() {
-    var _a, _b, _c, _d, _e, _f;
-    if (this.isAnnotating) this.setAnnotating(false);
-    if (this.isFrozen) this.setFrozen(false);
+    var _a, _b;
+    const wasAnnotating = this.isAnnotating;
+    const wasFrozen = this.isFrozen;
     const wasMinimized = (_b = (_a = this.toolbar) == null ? void 0 : _a.isMinimized()) != null ? _b : false;
-    if (!document.querySelector('[data-instruckt="toolbar"]')) {
-      (_c = this.toolbar) == null ? void 0 : _c.destroy();
-      this.toolbar = new Toolbar(this.config.position, this.makeToolbarCallbacks());
-      if (wasMinimized) {
-        this.toolbar.minimize();
-      }
-    }
-    if (!document.querySelector('[data-instruckt="markers"]')) {
-      (_d = this.markers) == null ? void 0 : _d.destroy();
-      this.markers = new AnnotationMarkers((annotation) => this.onMarkerClick(annotation));
-    }
-    if (!document.querySelector('[data-instruckt="highlight"]')) {
-      (_e = this.highlight) == null ? void 0 : _e.destroy();
-      this.highlight = new ElementHighlight();
-    }
-    if (wasMinimized) {
-      (_f = this.markers) == null ? void 0 : _f.setVisible(false);
-    }
+    if (this.isAnnotating) this.detachAnnotateListeners();
+    if (this.isFrozen) this.setFrozen(false);
+    this.isAnnotating = false;
+    this.isFrozen = false;
+    document.querySelectorAll("[data-instruckt]").forEach((el) => el.remove());
+    this.toolbar = new Toolbar(this.config.position, this.makeToolbarCallbacks());
+    if (wasMinimized) this.toolbar.minimize();
+    this.markers = new AnnotationMarkers((annotation) => this.onMarkerClick(annotation));
+    this.highlight = new ElementHighlight();
+    if (wasMinimized) this.markers.setVisible(false);
+    const existing = document.getElementById("instruckt-global");
+    if (existing) existing.remove();
+    injectGlobalStyles();
     this.syncMarkers();
+    if (wasAnnotating && !wasMinimized) this.setAnnotating(true);
   }
   // ── Minimize ────────────────────────────────────────────────────
   onMinimize(minimized) {
@@ -1282,6 +1391,33 @@ var Instruckt = class {
       (_d = this.popup) == null ? void 0 : _d.destroy();
     } else {
       (_e = this.markers) == null ? void 0 : _e.setVisible(true);
+    }
+  }
+  async loadAnnotations() {
+    this.loadFromStorage();
+    try {
+      const remote = await this.api.getAnnotations();
+      if (remote.length > 0) {
+        const remoteIds = new Set(remote.map((a) => a.id));
+        const localOnly = this.annotations.filter((a) => !remoteIds.has(a.id));
+        this.annotations = [...remote, ...localOnly];
+        this.saveToStorage();
+      }
+    } catch (e) {
+    }
+    this.syncMarkers();
+  }
+  saveToStorage() {
+    try {
+      localStorage.setItem(_Instruckt.STORAGE_KEY, JSON.stringify(this.annotations));
+    } catch (e) {
+    }
+  }
+  loadFromStorage() {
+    try {
+      const raw = localStorage.getItem(_Instruckt.STORAGE_KEY);
+      if (raw) this.annotations = JSON.parse(raw);
+    } catch (e) {
     }
   }
   // ── Page-scoped markers ─────────────────────────────────────────
@@ -1331,6 +1467,7 @@ var Instruckt = class {
         this.rafId = null;
       }
     }
+    this.updateFreezeStyles();
   }
   // ── Freeze mode ──────────────────────────────────────────────
   setFrozen(frozen) {
@@ -1338,39 +1475,107 @@ var Instruckt = class {
     this.isFrozen = frozen;
     (_a = this.toolbar) == null ? void 0 : _a.setFreezeActive(frozen);
     if (frozen) {
-      this.frozenStyleEl = document.createElement("style");
-      this.frozenStyleEl.id = "instruckt-freeze";
-      this.frozenStyleEl.textContent = `
+      this.updateFreezeStyles();
+      this.freezePopovers();
+      for (const evt of this.freezeBlockEvents) {
+        window.addEventListener(evt, this.boundFreezeClick, true);
+      }
+      window.addEventListener("submit", this.boundFreezeSubmit, true);
+      for (const evt of this.freezePassiveEvents) {
+        window.addEventListener(evt, this.boundFreezePassive, true);
+      }
+    } else {
+      (_b = this.frozenStyleEl) == null ? void 0 : _b.remove();
+      this.frozenStyleEl = null;
+      this.unfreezePopovers();
+      for (const evt of this.freezeBlockEvents) {
+        window.removeEventListener(evt, this.boundFreezeClick, true);
+      }
+      window.removeEventListener("submit", this.boundFreezeSubmit, true);
+      for (const evt of this.freezePassiveEvents) {
+        window.removeEventListener(evt, this.boundFreezePassive, true);
+      }
+    }
+  }
+  /** Pull open popovers out of the top layer so the rest of the page is clickable */
+  freezePopovers() {
+    this.frozenPopovers = [];
+    const openSelector = ":popover-open, .\\:popover-open";
+    document.querySelectorAll("[popover]").forEach((el) => {
+      var _a;
+      const htmlEl = el;
+      const val = (_a = htmlEl.getAttribute("popover")) != null ? _a : "";
+      let isOpen = false;
+      try {
+        isOpen = htmlEl.matches(openSelector);
+      } catch (e) {
+        try {
+          isOpen = htmlEl.matches(".\\:popover-open");
+        } catch (e2) {
+        }
+      }
+      if (!isOpen) return;
+      const rect = htmlEl.getBoundingClientRect();
+      this.frozenPopovers.push({ el: htmlEl, original: val });
+      htmlEl.removeAttribute("popover");
+      htmlEl.style.setProperty("display", "block", "important");
+      htmlEl.style.setProperty("position", "fixed", "important");
+      htmlEl.style.setProperty("z-index", "2147483644", "important");
+      htmlEl.style.setProperty("top", `${rect.top}px`, "important");
+      htmlEl.style.setProperty("left", `${rect.left}px`, "important");
+      htmlEl.style.setProperty("width", `${rect.width}px`, "important");
+      htmlEl.classList.add(":popover-open");
+    });
+  }
+  /** Restore popover attributes */
+  unfreezePopovers() {
+    for (const { el, original } of this.frozenPopovers) {
+      for (const prop of ["display", "position", "z-index", "top", "left", "width"]) {
+        el.style.removeProperty(prop);
+      }
+      el.classList.remove(":popover-open");
+      el.setAttribute("popover", original || "auto");
+    }
+    this.frozenPopovers = [];
+  }
+  /** Update freeze CSS — pointer-events only blocked when NOT annotating */
+  updateFreezeStyles() {
+    var _a;
+    if (!this.isFrozen) return;
+    (_a = this.frozenStyleEl) == null ? void 0 : _a.remove();
+    this.frozenStyleEl = document.createElement("style");
+    this.frozenStyleEl.id = "instruckt-freeze";
+    const pointerBlock = this.isAnnotating ? "" : `
+        a[href], a[wire\\:navigate], [wire\\:click], [wire\\:navigate],
+        [x-on\\:click], [@click], [v-on\\:click], [onclick],
+        button, input[type="submit"], select, [role="button"], [role="link"],
+        [tabindex] {
+          pointer-events: none !important;
+          cursor: not-allowed !important;
+        }
+      `;
+    this.frozenStyleEl.textContent = `
         *, *::before, *::after {
           animation-play-state: paused !important;
           transition: none !important;
         }
         video { filter: none !important; }
-        a[href], [wire\\:click], [wire\\:navigate], [x-on\\:click], button, input[type="submit"] {
-          pointer-events: none !important;
-        }
+        ${pointerBlock}
       `;
-      document.head.appendChild(this.frozenStyleEl);
-      document.addEventListener("click", this.boundFreezeClick, true);
-      document.addEventListener("submit", this.boundFreezeSubmit, true);
-    } else {
-      (_b = this.frozenStyleEl) == null ? void 0 : _b.remove();
-      this.frozenStyleEl = null;
-      document.removeEventListener("click", this.boundFreezeClick, true);
-      document.removeEventListener("submit", this.boundFreezeSubmit, true);
-    }
+    document.head.appendChild(this.frozenStyleEl);
   }
   attachAnnotateListeners() {
     document.addEventListener("mousemove", this.boundMouseMove);
     document.addEventListener("mouseleave", this.boundMouseLeave);
-    document.addEventListener("click", this.boundClick, true);
+    window.addEventListener("click", this.boundClick, true);
   }
   detachAnnotateListeners() {
     document.removeEventListener("mousemove", this.boundMouseMove);
     document.removeEventListener("mouseleave", this.boundMouseLeave);
-    document.removeEventListener("click", this.boundClick, true);
+    window.removeEventListener("click", this.boundClick, true);
   }
   isInstruckt(el) {
+    if (!el || !(el instanceof Element)) return false;
     return el.closest("[data-instruckt]") !== null;
   }
   // ── Framework detection ───────────────────────────────────────
@@ -1413,15 +1618,22 @@ var Instruckt = class {
       framework: pending.framework,
       url: window.location.href
     };
+    let annotation;
     try {
-      const annotation = await this.api.addAnnotation(payload);
-      this.annotations.push(annotation);
-      this.syncMarkers();
-      (_b = (_a = this.config).onAnnotationAdd) == null ? void 0 : _b.call(_a, annotation);
-      this.copyAnnotations();
-    } catch (err) {
-      console.error("[instruckt] Failed to save annotation:", err);
+      annotation = await this.api.addAnnotation(payload);
+    } catch (e) {
+      annotation = __spreadProps(__spreadValues({}, payload), {
+        id: crypto.randomUUID(),
+        status: "pending",
+        thread: [],
+        createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      });
     }
+    this.annotations.push(annotation);
+    this.saveToStorage();
+    this.syncMarkers();
+    (_b = (_a = this.config).onAnnotationAdd) == null ? void 0 : _b.call(_a, annotation);
+    this.copyAnnotations();
   }
   // ── Marker click — edit or delete ─────────────────────────────
   onMarkerClick(annotation) {
@@ -1431,17 +1643,16 @@ var Instruckt = class {
         try {
           const updated = await this.api.updateAnnotation(a.id, { comment: newComment });
           this.onAnnotationUpdated(updated);
-        } catch (err) {
-          console.error("[instruckt] Failed to update annotation:", err);
+        } catch (e) {
+          this.onAnnotationUpdated(__spreadProps(__spreadValues({}, a), { comment: newComment, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }));
         }
       },
       onDelete: async (a) => {
         try {
           await this.api.updateAnnotation(a.id, { status: "dismissed" });
-          this.removeAnnotation(a.id);
-        } catch (err) {
-          console.error("[instruckt] Failed to delete annotation:", err);
+        } catch (e) {
         }
+        this.removeAnnotation(a.id);
       }
     });
   }
@@ -1450,14 +1661,16 @@ var Instruckt = class {
     if (idx >= 0) {
       this.annotations[idx] = updated;
     }
+    this.saveToStorage();
     this.syncMarkers();
   }
   removeAnnotation(id) {
     this.annotations = this.annotations.filter((a) => a.id !== id);
+    this.saveToStorage();
     this.syncMarkers();
   }
-  // ── Clear all ──────────────────────────────────────────────────
-  async clearAll() {
+  // ── Clear ───────────────────────────────────────────────────────
+  async clearPage() {
     const page = this.pageAnnotations();
     for (const a of page) {
       try {
@@ -1466,6 +1679,19 @@ var Instruckt = class {
       }
     }
     this.annotations = this.annotations.filter((a) => !page.includes(a));
+    this.saveToStorage();
+    this.syncMarkers();
+  }
+  async clearEverything() {
+    const active = this.annotations.filter((a) => a.status !== "resolved" && a.status !== "dismissed");
+    for (const a of active) {
+      try {
+        await this.api.updateAnnotation(a.id, { status: "dismissed" });
+      } catch (e) {
+      }
+    }
+    this.annotations = [];
+    this.saveToStorage();
     this.syncMarkers();
   }
   // ── Keyboard ──────────────────────────────────────────────────
@@ -1475,11 +1701,15 @@ var Instruckt = class {
     const target = e.target;
     if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
     if (target.closest('[contenteditable="true"]')) return;
+    if (this.isInstruckt(target)) return;
     if (e.key === "a" && !e.metaKey && !e.ctrlKey && !e.altKey) {
       this.setAnnotating(!this.isAnnotating);
     }
     if (e.key === "f" && !e.metaKey && !e.ctrlKey && !e.altKey) {
       this.setFrozen(!this.isFrozen);
+    }
+    if (e.key === "x" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      this.clearPage();
     }
     if (e.key === "Escape") {
       if (this.isAnnotating) this.setAnnotating(false);
@@ -1556,6 +1786,8 @@ No open annotations.`;
     this.setAnnotating(false);
     this.setFrozen(false);
     document.removeEventListener("keydown", this.boundKeydown);
+    window.removeEventListener("scroll", this.boundReposition);
+    window.removeEventListener("resize", this.boundReposition);
     (_a = this.toolbar) == null ? void 0 : _a.destroy();
     (_b = this.highlight) == null ? void 0 : _b.destroy();
     (_c = this.popup) == null ? void 0 : _c.destroy();
@@ -1563,6 +1795,9 @@ No open annotations.`;
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
   }
 };
+// ── Persistence ─────────────────────────────────────────────────
+_Instruckt.STORAGE_KEY = "instruckt:annotations";
+var Instruckt = _Instruckt;
 
 // src/index.ts
 function init(config) {

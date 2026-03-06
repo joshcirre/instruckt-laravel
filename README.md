@@ -87,6 +87,7 @@ new Instruckt({
 |-----|--------|
 | `A` | Toggle annotation mode |
 | `F` | Freeze page (pause animations, block navigation) |
+| `X` | Clear all annotations on this page |
 | `Esc` | Exit annotation/freeze mode |
 
 ## Features
@@ -94,10 +95,12 @@ new Instruckt({
 - **Framework detection** — automatically identifies Livewire, Vue, Svelte, and React components
 - **Shadow DOM isolation** — all UI renders in shadow roots so it never conflicts with your styles
 - **Copy as markdown** — annotations auto-copy as structured markdown optimized for AI agents
-- **Freeze mode** — pause animations and block all navigation/interactions for stable annotation
+- **Freeze mode** — pause animations, freeze popovers/dropdowns, and block all navigation
+- **Annotation persistence** — annotations survive page reloads and Vite rebuilds via localStorage fallback; with a backend (Laravel), annotations are loaded from the API on init
 - **Minimize** — collapse to a small floating button with annotation count badge
-- **Page-scoped markers** — annotation pins only appear on the page where they were created
-- **Livewire navigation** — survives `wire:navigate` page transitions
+- **Page-scoped markers** — annotation pins reposition on scroll/resize and only appear on the page where they were created
+- **Clear controls** — clear current page (`X` key or trash icon), or clear all pages via flyout
+- **SPA navigation** — survives `wire:navigate`, Vue Router, React Router, and browser back/forward
 
 ## Public API
 

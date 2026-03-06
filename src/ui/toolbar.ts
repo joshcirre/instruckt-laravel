@@ -6,6 +6,7 @@ interface ToolbarCallbacks {
   onToggleAnnotate: (active: boolean) => void
   onFreezeAnimations: (frozen: boolean) => void
   onCopy: () => void
+  onClearPage?: () => void
   onClearAll?: () => void
   onMinimize?: (minimized: boolean) => void
 }
@@ -77,10 +78,23 @@ export class Toolbar {
       setTimeout(() => { this.copyBtn.innerHTML = ICONS.copy }, 1200)
     })
 
-    const clearBtn = this.makeBtn(ICONS.clear, 'Clear all annotations on this page', () => {
-      this.callbacks.onClearAll?.()
+    const clearWrap = document.createElement('div')
+    clearWrap.className = 'clear-wrap'
+
+    const clearBtn = this.makeBtn(ICONS.clear, 'Clear this page (X)', () => {
+      this.callbacks.onClearPage?.()
     })
     clearBtn.classList.add('danger-btn')
+
+    const clearAllBtn = this.makeBtn(
+      `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`,
+      'Clear ALL annotations across every page',
+      () => this.callbacks.onClearAll?.(),
+    )
+    clearAllBtn.classList.add('danger-btn', 'clear-all-btn')
+
+    clearWrap.appendChild(clearBtn)
+    clearWrap.appendChild(clearAllBtn)
 
     const minimizeBtn = this.makeBtn(ICONS.minimize, 'Minimize toolbar', () => {
       this.setMinimized(true)
@@ -91,7 +105,7 @@ export class Toolbar {
 
     this.toolbarEl.append(
       this.annotateBtn, mkDiv(), this.freezeBtn, mkDiv(),
-      this.copyBtn, clearBtn, mkDiv(), minimizeBtn,
+      this.copyBtn, clearWrap, mkDiv(), minimizeBtn,
     )
     this.shadow.appendChild(this.toolbarEl)
 
@@ -107,6 +121,13 @@ export class Toolbar {
       this.setMinimized(false)
     })
     this.shadow.appendChild(this.fab)
+
+    // Prevent toolbar clicks from reaching page handlers (e.g. Alpine @click.outside)
+    // Shadow DOM stopPropagation only works within the shadow tree — clicks still
+    // re-dispatch from the host element into the regular DOM.
+    this.host.addEventListener('click', (e) => e.stopPropagation())
+    this.host.addEventListener('mousedown', (e) => e.stopPropagation())
+    this.host.addEventListener('pointerdown', (e) => e.stopPropagation())
 
     this.applyPosition()
     const root = document.getElementById('instruckt-root') ?? document.body

@@ -30,6 +30,7 @@ export class AnnotationPopup {
     this.destroy()
     this.host = document.createElement('div')
     this.host.setAttribute('data-instruckt', 'popup')
+    this.stopHostPropagation(this.host)
     this.shadow = this.host.attachShadow({ mode: 'open' })
 
     const style = document.createElement('style')
@@ -48,7 +49,7 @@ export class AnnotationPopup {
 
     popup.innerHTML = `
       <div class="header">
-        <span class="element-tag" title="${esc(pending.elementPath)}">${esc(pending.elementName)}</span>
+        <span class="element-tag" title="${esc(pending.elementPath)}">${esc(pending.elementLabel)}</span>
         <button class="close-btn" title="Cancel (Esc)">✕</button>
       </div>
       ${fwBadge}${selText}
@@ -100,6 +101,7 @@ export class AnnotationPopup {
     this.destroy()
     this.host = document.createElement('div')
     this.host.setAttribute('data-instruckt', 'popup')
+    this.stopHostPropagation(this.host)
     this.shadow = this.host.attachShadow({ mode: 'open' })
 
     const style = document.createElement('style')
@@ -166,8 +168,18 @@ export class AnnotationPopup {
 
   // ── Helpers ───────────────────────────────────────────────────
 
+  /** Prevent popup interactions from reaching page handlers (e.g. @click.outside) */
+  private stopHostPropagation(host: HTMLElement): void {
+    for (const evt of ['click', 'mousedown', 'pointerdown'] as const) {
+      host.addEventListener(evt, (e) => e.stopPropagation())
+    }
+  }
+
   private positionHost(x: number, y: number): void {
     if (!this.host) return
+    // Use popover="manual" to render in the top layer (above native popovers)
+    this.host.setAttribute('popover', 'manual')
+    try { this.host.showPopover() } catch { /* fallback to z-index */ }
     Object.assign(this.host.style, { position: 'fixed', zIndex: '2147483647', left: '-9999px', top: '0' })
 
     requestAnimationFrame(() => {

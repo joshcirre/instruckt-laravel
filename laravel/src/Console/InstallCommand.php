@@ -362,7 +362,7 @@ final class InstallCommand extends Command
                 'skill_path' => '.claude/skills',
                 'config' => fn () => [
                     'command' => 'php',
-                    'args' => [$artisan, 'mcp:serve', 'instruckt'],
+                    'args' => [$artisan, 'mcp:start', 'instruckt'],
                 ],
             ],
             'cursor' => [
@@ -372,7 +372,7 @@ final class InstallCommand extends Command
                 'skill_path' => '.cursor/skills',
                 'config' => fn () => [
                     'command' => 'php',
-                    'args' => [$artisan, 'mcp:serve', 'instruckt'],
+                    'args' => [$artisan, 'mcp:start', 'instruckt'],
                 ],
             ],
             'codex' => [
@@ -382,7 +382,7 @@ final class InstallCommand extends Command
                 'skill_path' => '.agents/skills',
                 'config' => fn () => [
                     'command' => 'php',
-                    'args' => [$artisan, 'mcp:serve', 'instruckt'],
+                    'args' => [$artisan, 'mcp:start', 'instruckt'],
                     'cwd' => base_path(),
                 ],
             ],
@@ -394,7 +394,7 @@ final class InstallCommand extends Command
                 'config' => fn () => [
                     'type' => 'local',
                     'enabled' => true,
-                    'command' => ['php', $artisan, 'mcp:serve', 'instruckt'],
+                    'command' => ['php', $artisan, 'mcp:start', 'instruckt'],
                 ],
             ],
             'copilot' => [
@@ -404,7 +404,7 @@ final class InstallCommand extends Command
                 'skill_path' => '.github/skills',
                 'config' => fn () => [
                     'command' => 'php',
-                    'args' => [$artisan, 'mcp:serve', 'instruckt'],
+                    'args' => [$artisan, 'mcp:start', 'instruckt'],
                 ],
             ],
         ];

@@ -13,7 +13,7 @@ use Laravel\Mcp\Facades\Mcp;
 | Registers instruckt as both a local (stdio) and web (HTTP/SSE) MCP server.
 |
 | Local (stdio) — Claude Code connects via artisan command:
-|   .mcp.json: { "instruckt": { "command": "php", "args": ["artisan", "mcp:serve", "instruckt"] } }
+|   .mcp.json: { "instruckt": { "command": "php", "args": ["artisan", "mcp:start", "instruckt"] } }
 |
 | Web (HTTP/SSE) — Claude Code connects via URL:
 |   .mcp.json: { "instruckt": { "url": "http://localhost:8000/instruckt/mcp" } }

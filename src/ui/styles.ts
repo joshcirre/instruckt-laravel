@@ -93,6 +93,31 @@ export const TOOLBAR_CSS = /* css */ `
 .danger-btn { color: var(--ik-muted); opacity: .6; }
 .danger-btn:hover { opacity: 1; color: #ef4444; }
 
+.clear-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.clear-all-btn {
+  display: none;
+  position: absolute;
+  right: 100%;
+  top: 0;
+  background: var(--ik-bg);
+  box-shadow: var(--ik-shadow);
+  border-radius: 8px;
+}
+/* Invisible bridge so hover doesn't break crossing the gap */
+.clear-all-btn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 100%;
+  width: 6px;
+  height: 100%;
+}
+.clear-wrap:hover .clear-all-btn { display: flex; align-items: center; justify-content: center; }
+
 .fab {
   display: flex;
   align-items: center;

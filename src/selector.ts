@@ -50,26 +50,39 @@ export function getElementSelector(el: Element): string {
   return path.join(' > ')
 }
 
-/** Human-readable element name for display in the popup */
+/** Short element identifier for markdown output (grep-friendly) */
 export function getElementName(el: Element): string {
-  // Prefer component-level labels
-  const wireModel = el.getAttribute('wire:model') || el.getAttribute('wire:click')
-  if (wireModel) return `wire:${wireModel.split('.')[0]}`
-
-  const ariaLabel = el.getAttribute('aria-label')
-  if (ariaLabel) return ariaLabel
-
-  const id = el.id
-  if (id) return `#${id}`
-
   const tag = el.tagName.toLowerCase()
-  const role = el.getAttribute('role')
-  if (role) return `${tag}[${role}]`
+
+  const wireModel = el.getAttribute('wire:model') || el.getAttribute('wire:click')
+  if (wireModel) return `${tag}[wire:${wireModel.split('.')[0]}]`
+
+  if (el.id) return `${tag}#${el.id}`
 
   const firstClass = el.classList[0]
   if (firstClass) return `${tag}.${firstClass}`
 
   return tag
+}
+
+/** Human-readable HTML-like label for the popup UI */
+export function getElementLabel(el: Element): string {
+  const tag = el.tagName.toLowerCase()
+  const text = (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40)
+
+  // Build a short opening tag with key attributes
+  const attrs: string[] = []
+  if (el.id) attrs.push(`id="${el.id}"`)
+  const role = el.getAttribute('role')
+  if (role) attrs.push(`role="${role}"`)
+  const wireAttr = el.getAttribute('wire:model') || el.getAttribute('wire:click')
+  if (wireAttr) attrs.push(`wire:${el.hasAttribute('wire:model') ? 'model' : 'click'}="${wireAttr}"`)
+
+  const attrStr = attrs.length ? ' ' + attrs.join(' ') : ''
+  const openTag = `<${tag}${attrStr}>`
+
+  if (text) return `${openTag} ${text}`
+  return openTag
 }
 
 /** Get nearby readable text for context */

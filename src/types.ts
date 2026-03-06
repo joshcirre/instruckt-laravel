@@ -67,6 +67,7 @@ export interface PendingAnnotation {
   element: Element
   elementPath: string
   elementName: string
+  elementLabel: string
   cssClasses: string
   boundingBox: BoundingBox
   x: number

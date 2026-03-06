@@ -69,23 +69,43 @@ declare class Instruckt {
     private isAnnotating;
     private isFrozen;
     private frozenStyleEl;
+    private frozenPopovers;
     private rafId;
     private pendingMouseTarget;
+    private highlightLocked;
     private boundKeydown;
+    private boundReposition;
     constructor(config: InstrucktConfig);
     private init;
     private makeToolbarCallbacks;
     private reattach;
     private onMinimize;
+    private static STORAGE_KEY;
+    private loadAnnotations;
+    private saveToStorage;
+    private loadFromStorage;
     private syncMarkers;
     private annotationPageKey;
     private pageAnnotations;
     private totalActiveCount;
     private setAnnotating;
     private setFrozen;
-    /** Block all clicks on the page when frozen (except instruckt UI) */
+    /** Pull open popovers out of the top layer so the rest of the page is clickable */
+    private freezePopovers;
+    /** Restore popover attributes */
+    private unfreezePopovers;
+    private freezeBlockEvents;
+    private freezePassiveEvents;
+    /** Update freeze CSS — pointer-events only blocked when NOT annotating */
+    private updateFreezeStyles;
+    /** Block interactions on the page when frozen (except instruckt UI) */
     private boundFreezeClick;
     private boundFreezeSubmit;
+    /** Block focus/hover events that JS dropdowns use to auto-close.
+     *  Block ALL of these — even on instruckt elements — because frameworks
+     *  like Flux check if focusin target is contained in the popover and
+     *  close it if it's not (e.g. focus moved to our popup textarea). */
+    private boundFreezePassive;
     private boundMouseMove;
     private boundMouseLeave;
     private boundClick;
@@ -97,7 +117,8 @@ declare class Instruckt {
     private onMarkerClick;
     private onAnnotationUpdated;
     private removeAnnotation;
-    private clearAll;
+    private clearPage;
+    private clearEverything;
     private onKeydown;
     private copyAnnotations;
     exportMarkdown(): string;
