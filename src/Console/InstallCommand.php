@@ -228,15 +228,7 @@ final class InstallCommand extends Command
 
     private function injectBladeToolbar(string $framework): void
     {
-        $adapter = match ($framework) {
-            'livewire' => 'livewire',
-            'vue' => 'vue',
-            'react' => 'react',
-            'svelte' => 'svelte',
-            default => 'livewire',
-        };
-
-        $tag = "<x-instruckt-toolbar :adapters=\"['{$adapter}']\" />";
+        $tag = '<x-instruckt-toolbar />';
         $layouts = $this->findLayoutFiles();
 
         if (empty($layouts)) {
