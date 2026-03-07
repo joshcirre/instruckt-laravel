@@ -67,7 +67,7 @@ export class Instruckt {
       onFreezeAnimations: (frozen) => {
         this.setFrozen(frozen)
       },
-      onCopy: () => this.copyAnnotations(),
+      onCopy: () => this.copyToClipboard(true),
       onClearPage: () => this.clearPage(),
       onClearAll: () => this.clearEverything(),
       onMinimize: (min) => this.onMinimize(min),
@@ -81,10 +81,9 @@ export class Instruckt {
     window.addEventListener('scroll', this.boundReposition, { passive: true })
     window.addEventListener('resize', this.boundReposition, { passive: true })
 
-    // Survive Livewire wire:navigate (forward nav and back/forward button)
+    // Survive SPA navigation across frameworks
     document.addEventListener('livewire:navigated', () => this.reattach())
-    // For non-Livewire SPAs (Vue Router, React Router, SvelteKit, etc.)
-    // Use a microtask delay so the new DOM is in place before we reattach
+    document.addEventListener('inertia:navigate', () => this.syncMarkers())
     window.addEventListener('popstate', () => {
       setTimeout(() => this.reattach(), 0)
     })
@@ -105,7 +104,7 @@ export class Instruckt {
       onFreezeAnimations: (frozen: boolean) => {
         this.setFrozen(frozen)
       },
-      onCopy: () => this.copyAnnotations(),
+      onCopy: () => this.copyToClipboard(true),
       onClearPage: () => this.clearPage(),
       onClearAll: () => this.clearEverything(),
       onMinimize: (min: boolean) => this.onMinimize(min),
@@ -642,17 +641,27 @@ export class Instruckt {
 
   // ── Copy / export ─────────────────────────────────────────────
 
+  /** Auto-copy on annotation submit — only in secure contexts to avoid focus side-effects */
   private copyAnnotations(): void {
+    this.copyToClipboard(false)
+  }
+
+  /** Copy to clipboard. With fallback=true, uses execCommand for non-secure contexts (user-initiated only). */
+  private copyToClipboard(fallback: boolean): void {
     const md = this.exportMarkdown()
-    navigator.clipboard.writeText(md).catch(() => {
-      const el = document.createElement('textarea')
-      el.value = md
-      el.style.cssText = 'position:fixed;left:-9999px'
-      document.body.appendChild(el)
-      el.select()
-      document.execCommand('copy')
-      el.remove()
-    })
+    if (window.isSecureContext) {
+      navigator.clipboard.writeText(md).catch(() => { /* unavailable */ })
+    } else if (fallback) {
+      try {
+        const el = document.createElement('textarea')
+        el.value = md
+        el.style.cssText = 'position:fixed;left:-9999px'
+        document.body.appendChild(el)
+        el.select()
+        document.execCommand('copy')
+        el.remove()
+      } catch { /* unavailable */ }
+    }
   }
 
   exportMarkdown(): string {

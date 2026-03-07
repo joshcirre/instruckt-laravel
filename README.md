@@ -41,9 +41,11 @@ Or with the IIFE build:
 2. Press **A** or click the annotate button to enter annotation mode
 3. Hover over any element — instruckt highlights it and detects its framework component
 4. Click to annotate — type your feedback and save
-5. Annotations auto-copy as structured markdown to your clipboard
+5. Annotations auto-copy as structured markdown to your clipboard (requires secure context — `https://` or `localhost`)
 6. Paste into any AI coding agent (Claude Code, Cursor, Codex, Copilot, OpenCode, etc.)
 7. The agent reads the markdown and makes the requested code changes
+
+> **Note:** Auto-copy requires a secure context (`https://` or `localhost`). On `http://` domains (e.g. `.test`), use the copy button in the toolbar instead.
 
 ### Example Output
 

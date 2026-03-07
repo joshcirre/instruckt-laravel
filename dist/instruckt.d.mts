@@ -123,7 +123,10 @@ declare class Instruckt {
     private clearPage;
     private clearEverything;
     private onKeydown;
+    /** Auto-copy on annotation submit — only in secure contexts to avoid focus side-effects */
     private copyAnnotations;
+    /** Copy to clipboard. With fallback=true, uses execCommand for non-secure contexts (user-initiated only). */
+    private copyToClipboard;
     exportMarkdown(): string;
     getAnnotations(): Annotation[];
     destroy(): void;

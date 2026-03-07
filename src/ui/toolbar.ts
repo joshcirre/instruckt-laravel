@@ -88,10 +88,12 @@ export class Toolbar {
 
     const clearAllBtn = this.makeBtn(
       `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`,
-      'Clear ALL annotations across every page',
+      'Delete all instructions.',
       () => this.callbacks.onClearAll?.(),
     )
     clearAllBtn.classList.add('danger-btn', 'clear-all-btn')
+    clearAllBtn.removeAttribute('title')
+    clearAllBtn.setAttribute('data-tooltip', 'Delete all instructions.')
 
     clearWrap.appendChild(clearBtn)
     clearWrap.appendChild(clearAllBtn)

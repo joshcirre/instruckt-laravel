@@ -107,6 +107,24 @@ export const TOOLBAR_CSS = /* css */ `
   box-shadow: var(--ik-shadow);
   border-radius: 8px;
 }
+/* Instant tooltip */
+.clear-all-btn::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--ik-text);
+  color: var(--ik-bg);
+  pointer-events: none;
+  opacity: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.clear-all-btn:hover::before { opacity: 1; }
 /* Invisible bridge so hover doesn't break crossing the gap */
 .clear-all-btn::after {
   content: '';

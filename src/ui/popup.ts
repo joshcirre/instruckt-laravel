@@ -67,6 +67,8 @@ export class AnnotationPopup {
       submitBtn.disabled = textarea.value.trim().length === 0
     })
     textarea.addEventListener('keydown', (e) => {
+      // Stop ALL keyboard events from reaching page forms (React, Inertia, etc.)
+      e.stopPropagation()
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         if (!submitBtn.disabled) submitBtn.click()
@@ -135,6 +137,7 @@ export class AnnotationPopup {
     const deleteBtn = popup.querySelector<HTMLButtonElement>('[data-action="delete"]')!
 
     textarea.addEventListener('keydown', (e) => {
+      e.stopPropagation()
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         saveBtn.click()
@@ -168,9 +171,9 @@ export class AnnotationPopup {
 
   // ── Helpers ───────────────────────────────────────────────────
 
-  /** Prevent popup interactions from reaching page handlers (e.g. @click.outside) */
+  /** Prevent popup interactions from reaching page handlers (e.g. @click.outside, form submit) */
   private stopHostPropagation(host: HTMLElement): void {
-    for (const evt of ['click', 'mousedown', 'pointerdown'] as const) {
+    for (const evt of ['click', 'mousedown', 'pointerdown', 'keydown', 'keyup', 'keypress', 'submit'] as const) {
       host.addEventListener(evt, (e) => e.stopPropagation())
     }
   }

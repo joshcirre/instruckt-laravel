@@ -225,6 +225,24 @@ var TOOLBAR_CSS = (
   box-shadow: var(--ik-shadow);
   border-radius: 8px;
 }
+/* Instant tooltip */
+.clear-all-btn::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--ik-text);
+  color: var(--ik-bg);
+  pointer-events: none;
+  opacity: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.clear-all-btn:hover::before { opacity: 1; }
 /* Invisible bridge so hover doesn't break crossing the gap */
 .clear-all-btn::after {
   content: '';
@@ -511,13 +529,15 @@ var Toolbar = class {
     clearBtn.classList.add("danger-btn");
     const clearAllBtn = this.makeBtn(
       `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`,
-      "Clear ALL annotations across every page",
+      "Delete all instructions.",
       () => {
         var _a2, _b;
         return (_b = (_a2 = this.callbacks).onClearAll) == null ? void 0 : _b.call(_a2);
       }
     );
     clearAllBtn.classList.add("danger-btn", "clear-all-btn");
+    clearAllBtn.removeAttribute("title");
+    clearAllBtn.setAttribute("data-tooltip", "Delete all instructions.");
     clearWrap.appendChild(clearBtn);
     clearWrap.appendChild(clearAllBtn);
     const minimizeBtn = this.makeBtn(ICONS.minimize, "Minimize toolbar", () => {
@@ -760,6 +780,7 @@ var AnnotationPopup = class {
       submitBtn.disabled = textarea.value.trim().length === 0;
     });
     textarea.addEventListener("keydown", (e) => {
+      e.stopPropagation();
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         if (!submitBtn.disabled) submitBtn.click();
@@ -820,6 +841,7 @@ var AnnotationPopup = class {
     const saveBtn = popup.querySelector('[data-action="save"]');
     const deleteBtn = popup.querySelector('[data-action="delete"]');
     textarea.addEventListener("keydown", (e) => {
+      e.stopPropagation();
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         saveBtn.click();
@@ -846,9 +868,9 @@ var AnnotationPopup = class {
     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
   }
   // ── Helpers ───────────────────────────────────────────────────
-  /** Prevent popup interactions from reaching page handlers (e.g. @click.outside) */
+  /** Prevent popup interactions from reaching page handlers (e.g. @click.outside, form submit) */
   stopHostPropagation(host) {
-    for (const evt of ["click", "mousedown", "pointerdown"]) {
+    for (const evt of ["click", "mousedown", "pointerdown", "keydown", "keyup", "keypress", "submit"]) {
       host.addEventListener(evt, (e) => e.stopPropagation());
     }
   }
@@ -1327,7 +1349,7 @@ var _Instruckt = class _Instruckt {
       onFreezeAnimations: (frozen) => {
         this.setFrozen(frozen);
       },
-      onCopy: () => this.copyAnnotations(),
+      onCopy: () => this.copyToClipboard(true),
       onClearPage: () => this.clearPage(),
       onClearAll: () => this.clearEverything(),
       onMinimize: (min) => this.onMinimize(min)
@@ -1339,6 +1361,7 @@ var _Instruckt = class _Instruckt {
     window.addEventListener("scroll", this.boundReposition, { passive: true });
     window.addEventListener("resize", this.boundReposition, { passive: true });
     document.addEventListener("livewire:navigated", () => this.reattach());
+    document.addEventListener("inertia:navigate", () => this.syncMarkers());
     window.addEventListener("popstate", () => {
       setTimeout(() => this.reattach(), 0);
     });
@@ -1354,7 +1377,7 @@ var _Instruckt = class _Instruckt {
       onFreezeAnimations: (frozen) => {
         this.setFrozen(frozen);
       },
-      onCopy: () => this.copyAnnotations(),
+      onCopy: () => this.copyToClipboard(true),
       onClearPage: () => this.clearPage(),
       onClearAll: () => this.clearEverything(),
       onMinimize: (min) => this.onMinimize(min)
@@ -1740,17 +1763,28 @@ var _Instruckt = class _Instruckt {
     }
   }
   // ── Copy / export ─────────────────────────────────────────────
+  /** Auto-copy on annotation submit — only in secure contexts to avoid focus side-effects */
   copyAnnotations() {
+    this.copyToClipboard(false);
+  }
+  /** Copy to clipboard. With fallback=true, uses execCommand for non-secure contexts (user-initiated only). */
+  copyToClipboard(fallback) {
     const md = this.exportMarkdown();
-    navigator.clipboard.writeText(md).catch(() => {
-      const el = document.createElement("textarea");
-      el.value = md;
-      el.style.cssText = "position:fixed;left:-9999px";
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      el.remove();
-    });
+    if (window.isSecureContext) {
+      navigator.clipboard.writeText(md).catch(() => {
+      });
+    } else if (fallback) {
+      try {
+        const el = document.createElement("textarea");
+        el.value = md;
+        el.style.cssText = "position:fixed;left:-9999px";
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        el.remove();
+      } catch (e) {
+      }
+    }
   }
   exportMarkdown() {
     const pending = this.annotations.filter((a) => a.status !== "resolved" && a.status !== "dismissed");
