@@ -1,6 +1,5 @@
 @if(config('instruckt.enabled', true))
 <div id="instruckt-root">
-    <script src="{{ $scriptSrc }}" defer></script>
     <script>
         (function() {
             function boot() {
@@ -14,11 +13,10 @@
                 });
             }
 
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', boot);
-            } else {
-                boot();
-            }
+            var s = document.createElement('script');
+            s.src = @json($scriptSrc);
+            s.onload = boot;
+            document.getElementById('instruckt-root').appendChild(s);
         })();
     </script>
 </div>
