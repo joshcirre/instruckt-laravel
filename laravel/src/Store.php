@@ -10,7 +10,7 @@ final class Store
 {
     private static function path(): string
     {
-        return base_path('_instruckt/annotations.json');
+        return storage_path('app/_instruckt/annotations.json');
     }
 
     /**

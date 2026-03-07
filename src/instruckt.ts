@@ -425,9 +425,19 @@ export class Instruckt {
     this.highlight?.hide()
   }
 
+  /** Block mousedown/pointerdown in annotation mode so SPA frameworks can't navigate */
+  private boundAnnotateBlock = (e: Event): void => {
+    if (this.isInstruckt(e.target)) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.stopImmediatePropagation()
+  }
+
   private boundClick = (e: MouseEvent): void => {
     const target = e.target as Element
     if (this.isInstruckt(target)) return
+    // Always block clicks in annotation mode — prevents SPA navigation
+    // from changing the page before the user can finish their note.
     e.preventDefault()
     e.stopPropagation()
     e.stopImmediatePropagation()
@@ -474,6 +484,11 @@ export class Instruckt {
   private attachAnnotateListeners(): void {
     document.addEventListener('mousemove', this.boundMouseMove)
     document.addEventListener('mouseleave', this.boundMouseLeave)
+    // Block mousedown/pointerdown first — SPA frameworks (Livewire wire:navigate,
+    // Inertia) intercept these before click fires
+    for (const evt of ['mousedown', 'pointerdown'] as const) {
+      window.addEventListener(evt, this.boundAnnotateBlock, true)
+    }
     // Use window capture to fire before framework handlers on document
     window.addEventListener('click', this.boundClick, true)
   }
@@ -481,6 +496,9 @@ export class Instruckt {
   private detachAnnotateListeners(): void {
     document.removeEventListener('mousemove', this.boundMouseMove)
     document.removeEventListener('mouseleave', this.boundMouseLeave)
+    for (const evt of ['mousedown', 'pointerdown'] as const) {
+      window.removeEventListener(evt, this.boundAnnotateBlock, true)
+    }
     window.removeEventListener('click', this.boundClick, true)
   }
 

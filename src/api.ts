@@ -10,6 +10,7 @@ function headers(): Record<string, string> {
   const h: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
   }
   const csrf = getCsrfToken()
   if (csrf) h['X-XSRF-TOKEN'] = csrf

@@ -111,6 +111,8 @@ declare class Instruckt {
     private boundFreezePassive;
     private boundMouseMove;
     private boundMouseLeave;
+    /** Block mousedown/pointerdown in annotation mode so SPA frameworks can't navigate */
+    private boundAnnotateBlock;
     private boundClick;
     private attachAnnotateListeners;
     private detachAnnotateListeners;

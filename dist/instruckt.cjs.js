@@ -50,7 +50,8 @@ function getCsrfToken() {
 function headers() {
   const h = {
     "Content-Type": "application/json",
-    Accept: "application/json"
+    Accept: "application/json",
+    "X-Requested-With": "XMLHttpRequest"
   };
   const csrf = getCsrfToken();
   if (csrf) h["X-XSRF-TOKEN"] = csrf;
@@ -1284,6 +1285,13 @@ var _Instruckt = class _Instruckt {
       if (this.highlightLocked) return;
       (_a = this.highlight) == null ? void 0 : _a.hide();
     };
+    /** Block mousedown/pointerdown in annotation mode so SPA frameworks can't navigate */
+    this.boundAnnotateBlock = (e) => {
+      if (this.isInstruckt(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    };
     this.boundClick = (e) => {
       var _a, _b, _c, _d;
       const target = e.target;
@@ -1613,11 +1621,17 @@ var _Instruckt = class _Instruckt {
   attachAnnotateListeners() {
     document.addEventListener("mousemove", this.boundMouseMove);
     document.addEventListener("mouseleave", this.boundMouseLeave);
+    for (const evt of ["mousedown", "pointerdown"]) {
+      window.addEventListener(evt, this.boundAnnotateBlock, true);
+    }
     window.addEventListener("click", this.boundClick, true);
   }
   detachAnnotateListeners() {
     document.removeEventListener("mousemove", this.boundMouseMove);
     document.removeEventListener("mouseleave", this.boundMouseLeave);
+    for (const evt of ["mousedown", "pointerdown"]) {
+      window.removeEventListener(evt, this.boundAnnotateBlock, true);
+    }
     window.removeEventListener("click", this.boundClick, true);
   }
   isInstruckt(el) {
