@@ -7,7 +7,6 @@ namespace Instruckt\Laravel\Console;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 
-use function Laravel\Prompts\info;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\spin;
 use function Laravel\Prompts\warning;
@@ -28,13 +27,15 @@ final class InstallCommand extends Command
     {
         $this->registerAgents();
 
-        info('Installing instruckt...');
+        note('Installing instruckt');
+        $this->newLine();
 
         $this->call('vendor:publish', ['--tag' => 'instruckt-config', '--force' => false]);
         $this->installNpmPackage();
 
         $framework = $this->detectFramework();
-        note("Detected framework: {$framework}");
+        $this->newLine();
+        $this->components->twoColumnDetail('Detected framework', $framework);
 
         if (! $this->option('skip-toolbar')) {
             $this->injectToolbar($framework);
@@ -51,7 +52,7 @@ final class InstallCommand extends Command
         }
 
         $this->newLine();
-        info('instruckt installed successfully.');
+        $this->components->info('instruckt installed successfully.');
 
         return self::SUCCESS;
     }
@@ -62,7 +63,7 @@ final class InstallCommand extends Command
     {
         // Check if already installed
         if (File::exists(base_path('node_modules/instruckt/dist/instruckt.iife.js'))) {
-            note('npm package instruckt already installed.');
+            $this->components->twoColumnDetail('npm package', 'already installed');
 
             return;
         }
@@ -89,7 +90,7 @@ final class InstallCommand extends Command
         );
 
         if ($exitCode === 0) {
-            info('npm package installed.');
+            $this->components->twoColumnDetail('npm package', 'installed');
         } else {
             warning("Could not install npm package automatically. Run manually: {$cmd}");
         }
@@ -238,7 +239,7 @@ final class InstallCommand extends Command
         $relative = str_replace(base_path().'/', '', $appPath);
 
         if (str_contains($contents, 'instruckt')) {
-            note("{$relative} already has instruckt configured.");
+            $this->components->twoColumnDetail($relative, 'already configured');
 
             return true;
         }
@@ -247,7 +248,7 @@ final class InstallCommand extends Command
         $snippet = "\n// Instruckt — visual feedback toolbar\nimport { Instruckt } from 'instruckt';\nnew Instruckt({ endpoint: '/{$routePrefix}'{$adaptersOpt} });\n";
 
         File::append($appPath, $snippet);
-        info("Injected instruckt into {$relative}");
+        $this->components->twoColumnDetail($relative, 'injected');
 
         return true;
     }
@@ -262,7 +263,7 @@ final class InstallCommand extends Command
 
         if (empty($layouts)) {
             warning('No layout files found. Add this before </body> in your layout:');
-            note($tag);
+            $this->line("  {$tag}");
 
             return;
         }
@@ -274,7 +275,7 @@ final class InstallCommand extends Command
             $contents = File::get($layout);
 
             if (str_contains($contents, 'instruckt-toolbar') || str_contains($contents, 'x-instruckt')) {
-                note("{$relative} — already has toolbar");
+                $this->components->twoColumnDetail($relative, 'already has toolbar');
 
                 continue;
             }
@@ -294,13 +295,13 @@ final class InstallCommand extends Command
             }
 
             File::put($layout, $contents);
-            info("Injected toolbar into {$relative}");
+            $this->components->twoColumnDetail($relative, 'toolbar injected');
             $injected = true;
         }
 
         if (! $injected && ! empty($layouts)) {
             warning('Could not inject toolbar automatically. Add this before </body>:');
-            note($tag);
+            $this->line("  {$tag}");
         }
     }
 
@@ -443,9 +444,13 @@ final class InstallCommand extends Command
      */
     private function configureMcpForAgents(array $agents): void
     {
+        $this->newLine();
+        $this->info('Configuring MCP servers');
+        $this->newLine();
+
         foreach ($agents as $key => $agent) {
             if (str_ends_with($agent['mcp_path'], '.toml')) {
-                note('Codex detected — add instruckt manually to .codex/config.toml');
+                $this->components->warn('Codex detected — add instruckt manually to .codex/config.toml');
 
                 continue;
             }
@@ -462,18 +467,22 @@ final class InstallCommand extends Command
         $mcpPath = base_path($agent['mcp_path']);
         $configKey = $agent['mcp_key'];
         $serverConfig = ($agent['config'])();
+        $name = $agent['name'];
+        $longestName = 14; // "GitHub Copilot"
 
         if (File::exists($mcpPath)) {
             $config = json_decode(File::get($mcpPath), true);
 
             if (json_last_error() !== JSON_ERROR_NONE) {
-                warning("Could not parse {$agent['mcp_path']} — skipping {$agent['name']} MCP configuration.");
+                $this->output->write('  '.str_pad($name, $longestName).'... ');
+                $this->line('<fg=red>could not parse '.$agent['mcp_path'].'</>');
 
                 return;
             }
 
             if (isset($config[$configKey]['instruckt'])) {
-                note("{$agent['name']} MCP already configured.");
+                $this->output->write('  '.str_pad($name, $longestName).'... ');
+                $this->line('already configured');
 
                 return;
             }
@@ -485,7 +494,9 @@ final class InstallCommand extends Command
         }
 
         File::put($mcpPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
-        info("Configured instruckt MCP server for {$agent['name']}");
+
+        $this->output->write('  '.str_pad($name, $longestName).'... ');
+        $this->line('<fg=green>✓</>');
     }
 
     /**
@@ -499,17 +510,25 @@ final class InstallCommand extends Command
             return;
         }
 
+        $this->newLine();
+        $this->info('Installing agent skills');
+        $this->newLine();
+
         $installed = [];
+        $longestName = 14;
 
         foreach ($agents as $agent) {
             $skillDir = base_path($agent['skill_path'].'/instruckt');
+            $name = $agent['name'];
 
             if (isset($installed[$skillDir])) {
                 continue;
             }
 
+            $this->output->write('  '.str_pad($name, $longestName).'... ');
+
             if (File::exists($skillDir.'/SKILL.md')) {
-                note("{$agent['name']} skill already installed.");
+                $this->line('already installed');
                 $installed[$skillDir] = true;
 
                 continue;
@@ -517,7 +536,7 @@ final class InstallCommand extends Command
 
             File::ensureDirectoryExists($skillDir);
             File::copy($skillSource, $skillDir.'/SKILL.md');
-            info("Installed instruckt skill for {$agent['name']}");
+            $this->line('<fg=green>✓</>');
             $installed[$skillDir] = true;
         }
     }

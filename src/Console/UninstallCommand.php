@@ -8,7 +8,6 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 
 use function Laravel\Prompts\confirm;
-use function Laravel\Prompts\info;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\spin;
 use function Laravel\Prompts\table;
@@ -28,10 +27,13 @@ final class UninstallCommand extends Command
 
     public function handle(): int
     {
+        note('Uninstalling instruckt');
+        $this->newLine();
+
         $this->scan();
 
         if (empty($this->found)) {
-            info('Nothing to uninstall — instruckt is not installed.');
+            $this->components->info('Nothing to uninstall — instruckt is not installed.');
 
             return self::SUCCESS;
         }
@@ -42,7 +44,8 @@ final class UninstallCommand extends Command
         );
 
         if (! $this->option('force') && ! confirm('Proceed with uninstall?', default: false)) {
-            note('Uninstall cancelled.');
+            $this->newLine();
+            $this->components->info('Uninstall cancelled.');
 
             return self::SUCCESS;
         }
@@ -61,8 +64,12 @@ final class UninstallCommand extends Command
         }
 
         $this->newLine();
-        info('instruckt has been uninstalled.');
-        note('You may also want to run your asset build (npm run build / bun run build).');
+        $this->components->info('instruckt has been uninstalled.');
+        $this->newLine();
+        $this->line('  Next steps:');
+        $this->line('  <fg=gray>composer remove joshcirre/instruckt-laravel --dev</>');
+        $this->line('  <fg=gray>npm run build</> or <fg=gray>bun run build</>');
+        $this->newLine();
 
         return self::SUCCESS;
     }
@@ -138,7 +145,7 @@ final class UninstallCommand extends Command
         }
 
         File::delete($configPath);
-        info('Removed config/instruckt.php');
+        $this->components->twoColumnDetail('config/instruckt.php', '<fg=red>removed</>');
     }
 
     // ── JS toolbar injection ────────────────────────────────────
@@ -192,7 +199,7 @@ final class UninstallCommand extends Command
             $cleaned = rtrim($cleaned) . "\n";
 
             File::put($appPath, $cleaned);
-            info("Removed instruckt from {$relative}");
+            $this->components->twoColumnDetail($relative, '<fg=red>cleaned</>');
         }
     }
 
@@ -225,7 +232,7 @@ final class UninstallCommand extends Command
 
             if ($cleaned !== $contents) {
                 File::put($layout, $cleaned);
-                info("Removed toolbar from {$relative}");
+                $this->components->twoColumnDetail($relative, '<fg=red>toolbar removed</>');
             }
         }
     }
@@ -251,10 +258,10 @@ final class UninstallCommand extends Command
 
             if (empty($config[$key]) && count($config) === 1) {
                 File::delete($fullPath);
-                info("Removed {$path} ({$name}) — was only instruckt");
+                $this->components->twoColumnDetail("{$path} ({$name})", '<fg=red>removed</>');
             } else {
                 File::put($fullPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
-                info("Removed instruckt from {$path} ({$name})");
+                $this->components->twoColumnDetail("{$path} ({$name})", '<fg=red>cleaned</>');
             }
         }
     }
@@ -273,7 +280,7 @@ final class UninstallCommand extends Command
             }
 
             File::deleteDirectory($fullPath);
-            info("Removed {$dir}");
+            $this->components->twoColumnDetail($dir, '<fg=red>removed</>');
             $removed[$fullPath] = true;
         }
     }
@@ -289,7 +296,7 @@ final class UninstallCommand extends Command
         }
 
         File::deleteDirectory($storagePath);
-        info('Removed storage/app/instruckt');
+        $this->components->twoColumnDetail('storage/app/instruckt', '<fg=red>removed</>');
     }
 
     // ── npm package ─────────────────────────────────────────────
@@ -322,7 +329,7 @@ final class UninstallCommand extends Command
         );
 
         if ($exitCode === 0) {
-            info('Uninstalled npm package.');
+            $this->components->twoColumnDetail('npm package', '<fg=red>uninstalled</>');
         } else {
             warning("Could not uninstall npm package automatically. Run manually: {$cmd}");
         }
