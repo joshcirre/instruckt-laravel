@@ -22,6 +22,8 @@ php artisan instruckt:install
 
 This publishes the config, copies the JS assets, and automatically configures MCP for any detected AI agents (Claude Code, Cursor, Codex, OpenCode, GitHub Copilot).
 
+To uninstall, run `php artisan instruckt:uninstall`. See [Uninstall](#uninstall) for details.
+
 ## Setup
 
 Add the import to your `resources/js/app.js` (or `.ts`, `.tsx`, `.jsx`):
