@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Instruckt\Laravel\Components\Toolbar;
 use Instruckt\Laravel\Console\InstallCommand;
+use Instruckt\Laravel\Console\UninstallCommand;
 use Instruckt\Laravel\Http\Controllers\AnnotationController;
 
 final class InstrucktServiceProvider extends ServiceProvider
@@ -27,7 +28,7 @@ final class InstrucktServiceProvider extends ServiceProvider
         $this->registerMcpRoutes();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([InstallCommand::class]);
+            $this->commands([InstallCommand::class, UninstallCommand::class]);
         }
     }
 
