@@ -1,4 +1,4 @@
-@if(config('instruckt.enabled', true))
+@if(config('instruckt.enabled', false))
 <div id="instruckt-root">
     <script>
         (function() {

@@ -36,7 +36,7 @@ final class InstrucktServiceProvider extends ServiceProvider
 
     private function registerHttpRoutes(): void
     {
-        if (! config('instruckt.enabled', true)) {
+        if (! config('instruckt.enabled', false)) {
             return;
         }
 
@@ -56,7 +56,7 @@ final class InstrucktServiceProvider extends ServiceProvider
 
     private function registerMcpRoutes(): void
     {
-        if (! config('instruckt.enabled', true)) {
+        if (! config('instruckt.enabled', false)) {
             return;
         }
 
