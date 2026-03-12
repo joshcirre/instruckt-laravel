@@ -10,6 +10,7 @@
                     adapters: {!! $adapters !!},
                     theme: @json($theme),
                     position: @json($position),
+                    mcp: true,
                 };
                 var colors = {!! $colors !!};
                 var keys = {!! $keys !!};
