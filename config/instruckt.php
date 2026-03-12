@@ -76,6 +76,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Toolbar tool visibility
+    |--------------------------------------------------------------------------
+    | Show or hide built-in toolbar tools. Set to false to hide. Omit a key
+    | or use true to show. Available: annotate, screenshot, freeze, copy,
+    | clear_page, clear_all, minimize.
+    */
+    'tools' => [
+        'annotate' => true,
+        'screenshot' => true,
+        'freeze' => true,
+        'copy' => true,
+        'clear_page' => true,
+        'clear_all' => true,
+        'minimize' => true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | MCP tool name prefix
     |--------------------------------------------------------------------------
     */
