@@ -20,37 +20,66 @@ composer require joshcirre/instruckt-laravel --dev
 php artisan instruckt:install
 ```
 
-This publishes the config, copies the JS assets, and automatically configures MCP for any detected AI agents (Claude Code, Cursor, Codex, OpenCode, GitHub Copilot).
+The install command publishes the config, installs the npm package, and automatically:
+
+- Adds the **instruckt Vite plugin** to your `vite.config.js` with `server: false`
+- Adds `import 'virtual:instruckt'` to your JS entry point
+- Configures MCP for any detected AI agents (Claude Code, Cursor, Codex, OpenCode, GitHub Copilot)
 
 To uninstall, run `php artisan instruckt:uninstall`. See [Uninstall](#uninstall) for details.
 
 ## Setup
 
-The install command auto-detects your JS entry point and adds a dev-only import:
+### Vite Plugin (Default)
+
+The install command adds the instruckt Vite plugin to your `vite.config.js`:
 
 ```js
-// Instruckt — visual feedback toolbar (only loaded in dev)
-if (import.meta.env.DEV) {
-    import('instruckt').then(({ Instruckt }) => new Instruckt({ endpoint: '/instruckt' }));
-}
+import laravel from 'laravel-vite-plugin'
+import instruckt from 'instruckt/vite'
+
+export default defineConfig({
+  plugins: [
+    laravel({ input: ['resources/js/app.js'] }),
+    instruckt({
+      server: false,
+      endpoint: '/instruckt',
+      adapters: ['livewire', 'blade'],
+      mcp: true,
+    }),
+  ],
+})
 ```
 
-This uses Vite's `import.meta.env.DEV` flag, which means:
-- **`bun run dev` / `npm run dev`** — toolbar loads normally
-- **`bun run build` / `npm run build`** — instruckt is completely tree-shaken out of the production bundle (zero bytes shipped)
-
-This works for **all frameworks** — Livewire, Inertia (Vue/React/Svelte), or plain Blade — since Laravel apps already have a Vite JS entrypoint.
-
-> **Alternative: Blade component** — If you prefer not to touch your JS files, you can use `<x-instruckt-toolbar />` in your layout instead. See [Toolbar Component](#toolbar-component) below.
-
-### Manual Setup
-
-If you need to add the import manually (or the install command didn't detect your entry point), add this to your `resources/js/app.js` (or `.ts`, `.tsx`, `.jsx`):
+And a single import in your JS entry point:
 
 ```js
-if (import.meta.env.DEV) {
-    import('instruckt').then(({ Instruckt }) => new Instruckt({ endpoint: '/instruckt' }));
-}
+// resources/js/app.js
+import 'virtual:instruckt'
+```
+
+The `server: false` flag tells the Vite plugin that Laravel owns the backend — it only provides the virtual module for client injection.
+
+The plugin only runs during `vite serve` (`apply: 'serve'`), so instruckt is completely absent from production builds — zero bytes shipped.
+
+### Blade Component (Alternative)
+
+If you'd rather not touch your JS/Vite config, use the Blade component in your layout before `</body>`:
+
+```blade
+<x-instruckt-toolbar />
+```
+
+The component is gated behind `config('instruckt.enabled')`, which defaults to `true` only when `APP_ENV=local`. It loads the IIFE build and accepts optional attributes:
+
+```blade
+<x-instruckt-toolbar
+    theme="dark"
+    position="bottom-left"
+    :adapters="['livewire', 'vue']"
+    :colors="['default' => '#6366f1', 'screenshot' => '#22c55e', 'dismissed' => '#71717a']"
+    :keys="['annotate' => 'a', 'freeze' => 'f']"
+/>
 ```
 
 ### Connect Your AI Agent
@@ -68,9 +97,14 @@ The install command automatically detects your AI agent and configures MCP. If y
 }
 ```
 
-## Storage
+## How It Works
 
-Annotations are stored in `storage/app/_instruckt/annotations.json`. Screenshots are saved as PNGs in `storage/app/_instruckt/screenshots/`. No database migrations needed.
+1. The Vite plugin (or Blade component) initializes the annotation UI
+2. Users click elements and leave feedback — optionally capturing screenshots
+3. Annotations auto-copy as structured markdown to the clipboard for pasting into AI agents
+4. Annotations are persisted to `storage/app/_instruckt/` via API routes
+5. On page reload (including Vite rebuilds), annotations are loaded from the API and markers reappear
+6. AI agents can read pending annotations via MCP tools and resolve them after fixing
 
 ## MCP Tools
 
@@ -81,6 +115,10 @@ The package registers these MCP tools for your AI agent:
 | `instruckt.get_all_pending` | Get all pending annotations |
 | `instruckt.get_screenshot` | Get the screenshot image for an annotation |
 | `instruckt.resolve` | Mark an annotation as resolved (removes marker from browser) |
+
+## Storage
+
+Annotations are stored in `storage/app/_instruckt/annotations.json`. Screenshots are saved as PNGs in `storage/app/_instruckt/screenshots/`. No database migrations needed.
 
 ## Configuration
 
@@ -103,17 +141,19 @@ return [
     // Middleware applied to API routes
     'middleware' => explode(',', env('INSTRUCKT_MIDDLEWARE', 'api')),
 
-    // Override JS source (e.g. pinned CDN version)
+    // Override JS source (e.g. pinned CDN version) — only used by Blade component
     'cdn_url' => env('INSTRUCKT_CDN_URL', null),
 
-    // Marker pin colors (CSS color strings)
+    // Marker pin colors (CSS color strings) — only used by Blade component
+    // When using the Vite plugin, set these in vite.config.js instead
     'colors' => [
         // 'default'    => '#6366f1',  // indigo — standard annotations
         // 'screenshot' => '#22c55e',  // green — annotations with screenshots
         // 'dismissed'  => '#71717a',  // gray — dismissed
     ],
 
-    // Keyboard shortcuts (single key characters)
+    // Keyboard shortcuts — only used by Blade component
+    // When using the Vite plugin, set these in vite.config.js instead
     'keys' => [
         // 'annotate'   => 'a',  // toggle annotation mode
         // 'freeze'     => 'f',  // freeze page
@@ -123,51 +163,17 @@ return [
 ];
 ```
 
-## Toolbar Component (Alternative)
-
-If you'd rather not add a JS import, you can use the Blade component. Add it to your layout(s) before `</body>`:
-
-```blade
-<x-instruckt-toolbar />
-```
-
-The component is automatically gated behind `config('instruckt.enabled')`, which defaults to `true` only when `APP_ENV=local`. It won't render anything in production — no extra checks needed.
-
-The component loads the IIFE build and accepts optional attributes:
-
-```blade
-<x-instruckt-toolbar
-    theme="dark"
-    position="bottom-left"
-    :adapters="['livewire', 'vue']"
-    :colors="['default' => '#6366f1', 'screenshot' => '#22c55e', 'dismissed' => '#71717a']"
-    :keys="['annotate' => 'a', 'freeze' => 'f']"
-/>
-```
-
-You can also set colors and keys globally via `config/instruckt.php` instead of passing them as component attributes.
+> **Note:** When using the Vite plugin, toolbar visual config (colors, keys, position, theme) lives in `vite.config.js`. The PHP config governs backend behavior (enabled, routes, middleware, MCP).
 
 ## Production Safety
 
 Instruckt is designed as a dev-only tool with multiple layers of protection:
 
-| Layer | JS Method | Blade Method |
-|-------|-----------|--------------|
-| **Frontend** | `import.meta.env.DEV` — code is tree-shaken out of production Vite builds entirely | `@if(config('instruckt.enabled'))` — component doesn't render |
+| Layer | Vite Plugin | Blade Component |
+|-------|-------------|-----------------|
+| **Frontend** | Plugin uses `apply: 'serve'` — absent from production builds entirely | `@if(config('instruckt.enabled'))` — component doesn't render |
 | **Backend routes** | Only registered when `config('instruckt.enabled')` is `true` | Same |
-| **Middleware** | Only active when enabled | Same |
 | **Config default** | `enabled` defaults to `true` only when `APP_ENV=local` | Same |
-
-Even if you accidentally install instruckt as a non-dev Composer dependency, the toolbar won't appear in production as long as you build your assets with `vite build` (JS method) or have `APP_ENV=production` (Blade method).
-
-## How It Works
-
-1. The JS import (or Blade component) initializes the annotation UI
-2. Users click elements and leave feedback — optionally capturing screenshots
-3. Annotations auto-copy as structured markdown to the clipboard for pasting into AI agents
-4. Annotations are persisted to `storage/app/_instruckt/` via API routes
-5. On page reload (including Vite rebuilds), annotations are loaded from the API and markers reappear
-6. AI agents can read pending annotations via MCP tools and resolve them after fixing
 
 ## API Routes
 
@@ -181,7 +187,7 @@ All routes are registered under the configured prefix (default: `/instruckt`):
 
 ## Keyboard Shortcuts
 
-Default shortcuts (customizable via `keys` config):
+Default shortcuts (customizable via `keys` in your Vite plugin options or config):
 
 | Key | Action |
 |-----|--------|
@@ -205,12 +211,14 @@ php artisan instruckt:uninstall
 
 This scans for all instruckt artifacts, shows you what will be removed, and asks for confirmation before proceeding. It reverses everything the install command did:
 
+- Vite plugin from `vite.config.*`
+- Virtual import (`import 'virtual:instruckt'`) from your JS entry point
+- Legacy JS toolbar code (if installed with an older version)
 - Published config (`config/instruckt.php`)
-- JS toolbar code from your entry point (`resources/js/app.js`, etc.)
 - Blade toolbar component from layout files
 - MCP server entries from all agent configs (`.mcp.json`, `.cursor/mcp.json`, etc.)
 - Agent skill directories
-- Stored annotations and screenshots (`storage/app/instruckt/`)
+- Stored annotations and screenshots (`storage/app/_instruckt/`)
 - The `instruckt` npm package
 
 After uninstalling, remove the Composer package:
