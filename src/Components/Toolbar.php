@@ -22,6 +22,8 @@ final class Toolbar extends Component
 
     public string $keys;
 
+    public string $tools;
+
     public function __construct(
         string $endpoint = '',
         /** @var array<string> $adapters */
@@ -30,6 +32,7 @@ final class Toolbar extends Component
         string $position = 'bottom-right',
         ?array $colors = null,
         ?array $keys = null,
+        ?array $tools = null,
     ) {
         $this->endpoint = $endpoint ?: url(config('instruckt.route_prefix', 'instruckt'));
         $this->adapters = json_encode($adapters);
@@ -37,6 +40,7 @@ final class Toolbar extends Component
         $this->position = $position;
         $this->colors = json_encode($colors ?? config('instruckt.colors', []));
         $this->keys = json_encode($keys ?? config('instruckt.keys', []));
+        $this->tools = json_encode($tools ?? config('instruckt.tools', []));
         $this->scriptSrc = $this->resolveScriptSrc();
     }
 

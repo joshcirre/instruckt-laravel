@@ -1,15 +1,22 @@
-@if(config('instruckt.enabled', true))
+@if(config('instruckt.enabled', false))
 <div id="instruckt-root">
-    @if(! config('instruckt.use_esm', true))
     <script>
         (function() {
-            var configEl = document.getElementById('instruckt-config');
-            var opts = configEl && configEl.textContent ? JSON.parse(configEl.textContent) : {};
-            window.__instrucktOpts = opts;
-
             function boot() {
                 if (window.__instruckt) return;
                 if (typeof Instruckt === 'undefined') return;
+                var opts = {
+                    endpoint: @json($endpoint),
+                    adapters: {!! $adapters !!},
+                    theme: @json($theme),
+                    position: @json($position),
+                };
+                var colors = {!! $colors !!};
+                var keys = {!! $keys !!};
+                var tools = {!! $tools !!};
+                if (Object.keys(colors).length) opts.colors = colors;
+                if (Object.keys(keys).length) opts.keys = keys;
+                if (Object.keys(tools).length) opts.tools = tools;
                 window.__instruckt = Instruckt.init(opts);
             }
 
@@ -19,15 +26,5 @@
             document.getElementById('instruckt-root').appendChild(s);
         })();
     </script>
-    @else
-    <script>
-        (function() {
-            var configEl = document.getElementById('instruckt-config');
-            if (configEl && configEl.textContent) {
-                window.__instrucktOpts = JSON.parse(configEl.textContent);
-            }
-        })();
-    </script>
-    @endif
 </div>
 @endif
