@@ -16,7 +16,14 @@ final class GetScreenshotTool extends Tool
 {
     public function handle(Request $request): Response
     {
-        $annotation = Store::getAnnotationOrFail($request->get('annotation_id'));
+        $annotation = Store::getAnnotation($request->get('annotation_id'));
+
+        if (! $annotation) {
+            return Response::text(json_encode([
+                'ok' => false,
+                'error' => 'Annotation not found.',
+            ]));
+        }
 
         $screenshot = $annotation['screenshot'] ?? null;
 
@@ -37,8 +44,9 @@ final class GetScreenshotTool extends Tool
         }
 
         $data = base64_encode(file_get_contents($path));
+        $mimeType = str_ends_with($screenshot, '.svg') ? 'image/svg+xml' : 'image/png';
 
-        return Response::image($data, 'image/png');
+        return Response::image($data, $mimeType);
     }
 
     public function schema(JsonSchema $schema): array

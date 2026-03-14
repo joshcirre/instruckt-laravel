@@ -7,6 +7,10 @@ namespace Instruckt\Laravel\Console;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 
+use function Laravel\Prompts\note;
+use function Laravel\Prompts\spin;
+use function Laravel\Prompts\warning;
+
 final class InstallCommand extends Command
 {
     protected $signature = 'instruckt:install
@@ -23,7 +27,7 @@ final class InstallCommand extends Command
     {
         $this->registerAgents();
 
-        $this->components->info('Installing instruckt...');
+        note('Installing instruckt');
         $this->newLine();
 
         $this->call('vendor:publish', ['--tag' => 'instruckt-config', '--force' => false]);
@@ -49,7 +53,6 @@ final class InstallCommand extends Command
 
         $this->newLine();
         $this->components->info('instruckt installed successfully.');
-        $this->newLine();
 
         return self::SUCCESS;
     }
@@ -60,7 +63,7 @@ final class InstallCommand extends Command
     {
         // Check if already installed
         if (File::exists(base_path('node_modules/instruckt/dist/instruckt.iife.js'))) {
-            $this->line('  npm package instruckt already installed.');
+            $this->components->twoColumnDetail('npm package', 'already installed');
 
             return;
         }
@@ -68,23 +71,28 @@ final class InstallCommand extends Command
         $useBun = File::exists(base_path('bun.lockb')) || File::exists(base_path('bun.lock'));
         $cmd = $useBun ? 'bun add -d instruckt' : 'npm install --save-dev instruckt';
 
-        $this->components->info("Installing npm package: {$cmd}");
+        $exitCode = spin(
+            callback: function () use ($cmd) {
+                $process = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path());
 
-        $process = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path());
+                if (! $process) {
+                    return 1;
+                }
 
-        if ($process) {
-            stream_get_contents($pipes[1]);
-            stream_get_contents($pipes[2]);
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            $exitCode = proc_close($process);
+                stream_get_contents($pipes[1]);
+                stream_get_contents($pipes[2]);
+                fclose($pipes[1]);
+                fclose($pipes[2]);
 
-            if ($exitCode === 0) {
-                $this->components->info('npm package installed.');
-            } else {
-                $this->components->warn('Could not install npm package automatically. Run manually:');
-                $this->line("  {$cmd}");
-            }
+                return proc_close($process);
+            },
+            message: "Installing npm package ({$cmd})...",
+        );
+
+        if ($exitCode === 0) {
+            $this->components->twoColumnDetail('npm package', 'installed');
+        } else {
+            warning("Could not install npm package automatically. Run manually: {$cmd}");
         }
     }
 
@@ -184,13 +192,149 @@ final class InstallCommand extends Command
 
     private function injectToolbar(string $framework): void
     {
-        // Always prefer JS entry point (works for all frameworks including Livewire)
+        // Tier 1: Vite plugin (preferred — cleanest integration)
+        $viteConfig = $this->findViteConfig();
+
+        if ($viteConfig && $this->injectVitePlugin($viteConfig, $framework)) {
+            $this->injectVirtualImport();
+
+            return;
+        }
+
+        // Tier 2: Legacy JS snippet (no vite config, but has app.js)
         if ($this->injectJsToolbar($framework)) {
             return;
         }
 
-        // Fall back to Blade component if no JS entry point found
+        // Tier 3: Blade component fallback
         $this->injectBladeToolbar($framework);
+    }
+
+    // ── Vite plugin injection ────────────────────────────────────
+
+    private function findViteConfig(): ?string
+    {
+        $candidates = [
+            base_path('vite.config.ts'),
+            base_path('vite.config.js'),
+            base_path('vite.config.mts'),
+            base_path('vite.config.mjs'),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (File::exists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function injectVitePlugin(string $viteConfigPath, string $framework): bool
+    {
+        $contents = File::get($viteConfigPath);
+        $relative = str_replace(base_path().'/', '', $viteConfigPath);
+
+        if (str_contains($contents, 'instruckt/vite') || str_contains($contents, 'instruckt(')) {
+            $this->components->twoColumnDetail($relative, 'already configured');
+
+            return true;
+        }
+
+        // Need a plugins array to inject into
+        if (! preg_match('/plugins\s*:\s*\[/', $contents)) {
+            return false;
+        }
+
+        $routePrefix = config('instruckt.route_prefix', 'instruckt');
+
+        // Build adapters list — always include 'blade'
+        $jsFramework = match (true) {
+            str_starts_with($framework, 'inertia-') => str_replace('inertia-', '', $framework),
+            $framework === 'livewire' => 'livewire',
+            default => null,
+        };
+
+        $adapters = $jsFramework ? "'{$jsFramework}', 'blade'" : "'blade'";
+
+        // Add import after the last existing import statement
+        $importLine = "import instruckt from 'instruckt/vite'";
+
+        if (preg_match('/^import\s.+$/m', $contents)) {
+            // Insert after the last import line
+            $contents = preg_replace(
+                '/(^import\s.+$)(?![\s\S]*^import\s)/m',
+                "$1\n{$importLine}",
+                $contents,
+                1
+            );
+        } else {
+            $contents = $importLine."\n".$contents;
+        }
+
+        // Add plugin call as the first entry in the plugins array
+        $pluginCall = "instruckt({ server: false, endpoint: '/{$routePrefix}', adapters: [{$adapters}], mcp: true }),";
+        $contents = preg_replace(
+            '/(plugins\s*:\s*\[)(\s*)/',
+            "$1$2{$pluginCall}\n        ",
+            $contents,
+            1
+        );
+
+        File::put($viteConfigPath, $contents);
+        $this->components->twoColumnDetail($relative, 'Vite plugin injected');
+
+        return true;
+    }
+
+    private function injectVirtualImport(): void
+    {
+        $candidates = [
+            resource_path('js/app.tsx'),
+            resource_path('js/app.ts'),
+            resource_path('js/app.jsx'),
+            resource_path('js/app.js'),
+        ];
+
+        $appPath = null;
+
+        foreach ($candidates as $candidate) {
+            if (File::exists($candidate)) {
+                $appPath = $candidate;
+
+                break;
+            }
+        }
+
+        if (! $appPath) {
+            return;
+        }
+
+        $contents = File::get($appPath);
+        $relative = str_replace(base_path().'/', '', $appPath);
+
+        if (str_contains($contents, 'instruckt')) {
+            $this->components->twoColumnDetail($relative, 'already configured');
+
+            return;
+        }
+
+        // Add virtual import after the last existing import statement
+        $importLine = "import 'virtual:instruckt'";
+
+        if (preg_match('/^import\s.+$/m', $contents)) {
+            $contents = preg_replace(
+                '/(^import\s.+$)(?![\s\S]*^import\s)/m',
+                "$1\n{$importLine}",
+                $contents,
+                1
+            );
+            File::put($appPath, $contents);
+        } else {
+            File::append($appPath, "\n{$importLine}\n");
+        }
+
+        $this->components->twoColumnDetail($relative, 'virtual import added');
     }
 
     /** @return bool Whether injection succeeded */
@@ -231,16 +375,19 @@ final class InstallCommand extends Command
         $relative = str_replace(base_path().'/', '', $appPath);
 
         if (str_contains($contents, 'instruckt')) {
-            $this->line("  {$relative} already has instruckt configured.");
+            $this->components->twoColumnDetail($relative, 'already configured');
 
             return true;
         }
 
-        $adaptersOpt = $jsFramework ? ", adapters: ['{$jsFramework}']" : '';
-        $snippet = "\n// Instruckt — visual feedback toolbar\nimport { Instruckt } from 'instruckt';\nnew Instruckt({ endpoint: '/{$routePrefix}'{$adaptersOpt} });\n";
+        // Always include 'blade' — every Laravel app uses Blade templates and the
+        // Blade adapter provides view-to-file mapping for elements outside JS components.
+        $adapters = $jsFramework ? "'{$jsFramework}', 'blade'" : "'blade'";
+        $adaptersOpt = ", adapters: [{$adapters}]";
+        $snippet = "\n// Instruckt — visual feedback toolbar (only loaded in dev)\nif (import.meta.env.DEV) {\n    import('instruckt').then(({ Instruckt }) => new Instruckt({ endpoint: '/{$routePrefix}'{$adaptersOpt}, mcp: true }));\n}\n";
 
         File::append($appPath, $snippet);
-        $this->components->info("Injected instruckt into {$relative}");
+        $this->components->twoColumnDetail($relative, 'injected');
 
         return true;
     }
@@ -254,7 +401,7 @@ final class InstallCommand extends Command
         $layouts = $this->findLayoutFiles();
 
         if (empty($layouts)) {
-            $this->components->warn('No layout files found. Add this before </body> in your layout:');
+            warning('No layout files found. Add this before </body> in your layout:');
             $this->line("  {$tag}");
 
             return;
@@ -267,7 +414,7 @@ final class InstallCommand extends Command
             $contents = File::get($layout);
 
             if (str_contains($contents, 'instruckt-toolbar') || str_contains($contents, 'x-instruckt')) {
-                $this->line("  {$relative} — already has toolbar");
+                $this->components->twoColumnDetail($relative, 'already has toolbar');
 
                 continue;
             }
@@ -287,12 +434,12 @@ final class InstallCommand extends Command
             }
 
             File::put($layout, $contents);
-            $this->components->info("Injected toolbar into {$relative}");
+            $this->components->twoColumnDetail($relative, 'toolbar injected');
             $injected = true;
         }
 
         if (! $injected && ! empty($layouts)) {
-            $this->components->warn('Could not inject toolbar automatically. Add this before </body>:');
+            warning('Could not inject toolbar automatically. Add this before </body>:');
             $this->line("  {$tag}");
         }
     }
@@ -436,9 +583,13 @@ final class InstallCommand extends Command
      */
     private function configureMcpForAgents(array $agents): void
     {
+        $this->newLine();
+        $this->info('Configuring MCP servers');
+        $this->newLine();
+
         foreach ($agents as $key => $agent) {
             if (str_ends_with($agent['mcp_path'], '.toml')) {
-                $this->line("  Codex detected — add instruckt manually to .codex/config.toml");
+                $this->components->warn('Codex detected — add instruckt manually to .codex/config.toml');
 
                 continue;
             }
@@ -455,18 +606,22 @@ final class InstallCommand extends Command
         $mcpPath = base_path($agent['mcp_path']);
         $configKey = $agent['mcp_key'];
         $serverConfig = ($agent['config'])();
+        $name = $agent['name'];
+        $longestName = 14; // "GitHub Copilot"
 
         if (File::exists($mcpPath)) {
             $config = json_decode(File::get($mcpPath), true);
 
             if (json_last_error() !== JSON_ERROR_NONE) {
-                $this->warn("  Could not parse {$agent['mcp_path']} — skipping {$agent['name']} MCP configuration.");
+                $this->output->write('  '.str_pad($name, $longestName).'... ');
+                $this->line('<fg=red>could not parse '.$agent['mcp_path'].'</>');
 
                 return;
             }
 
             if (isset($config[$configKey]['instruckt'])) {
-                $this->line("  {$agent['name']} MCP already configured.");
+                $this->output->write('  '.str_pad($name, $longestName).'... ');
+                $this->line('already configured');
 
                 return;
             }
@@ -478,7 +633,9 @@ final class InstallCommand extends Command
         }
 
         File::put($mcpPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
-        $this->components->info("Configured instruckt MCP server for {$agent['name']}");
+
+        $this->output->write('  '.str_pad($name, $longestName).'... ');
+        $this->line('<fg=green>✓</>');
     }
 
     /**
@@ -492,17 +649,25 @@ final class InstallCommand extends Command
             return;
         }
 
+        $this->newLine();
+        $this->info('Installing agent skills');
+        $this->newLine();
+
         $installed = [];
+        $longestName = 14;
 
         foreach ($agents as $agent) {
             $skillDir = base_path($agent['skill_path'].'/instruckt');
+            $name = $agent['name'];
 
             if (isset($installed[$skillDir])) {
                 continue;
             }
 
+            $this->output->write('  '.str_pad($name, $longestName).'... ');
+
             if (File::exists($skillDir.'/SKILL.md')) {
-                $this->line("  {$agent['name']} skill already installed.");
+                $this->line('already installed');
                 $installed[$skillDir] = true;
 
                 continue;
@@ -510,7 +675,7 @@ final class InstallCommand extends Command
 
             File::ensureDirectoryExists($skillDir);
             File::copy($skillSource, $skillDir.'/SKILL.md');
-            $this->components->info("Installed instruckt skill for {$agent['name']}");
+            $this->line('<fg=green>✓</>');
             $installed[$skillDir] = true;
         }
     }

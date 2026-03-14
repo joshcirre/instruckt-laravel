@@ -1,4 +1,4 @@
-@if(config('instruckt.enabled', true))
+@if(config('instruckt.enabled', false))
 <div id="instruckt-root">
     <script>
         (function() {
@@ -10,11 +10,14 @@
                     adapters: {!! $adapters !!},
                     theme: @json($theme),
                     position: @json($position),
+                    mcp: true,
                 };
                 var colors = {!! $colors !!};
                 var keys = {!! $keys !!};
+                var tools = {!! $tools !!};
                 if (Object.keys(colors).length) opts.colors = colors;
                 if (Object.keys(keys).length) opts.keys = keys;
+                if (Object.keys(tools).length) opts.tools = tools;
                 window.__instruckt = Instruckt.init(opts);
             }
 

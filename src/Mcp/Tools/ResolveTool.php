@@ -16,7 +16,16 @@ final class ResolveTool extends Tool
 {
     public function handle(Request $request): Response
     {
-        $annotation = Store::updateAnnotation($request->get('annotation_id'), [
+        $annotation = Store::getAnnotation($request->get('annotation_id'));
+
+        if (! $annotation) {
+            return Response::text(json_encode([
+                'ok' => false,
+                'error' => 'Annotation not found.',
+            ]));
+        }
+
+        $updated = Store::updateAnnotation($request->get('annotation_id'), [
             'status' => 'resolved',
             'resolved_by' => 'agent',
             'resolved_at' => now()->toIso8601String(),
@@ -24,7 +33,7 @@ final class ResolveTool extends Tool
 
         return Response::text(json_encode([
             'ok' => true,
-            'annotation' => $annotation,
+            'annotation' => $updated,
         ], JSON_PRETTY_PRINT));
     }
 

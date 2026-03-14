@@ -115,6 +115,9 @@ final class Store
             $screenshot = self::saveScreenshot($id, $data['screenshot']);
         }
 
+        // Enrich framework context with server-side source resolution
+        $framework = SourceResolver::enrich($data['framework'] ?? null);
+
         $annotation = [
             'id' => $id,
             'url' => $data['url'] ?? '',
@@ -131,7 +134,7 @@ final class Store
             'intent' => $data['intent'] ?? 'fix',
             'severity' => $data['severity'] ?? 'important',
             'status' => 'pending',
-            'framework' => $data['framework'] ?? null,
+            'framework' => $framework,
             'thread' => [],
             'resolved_by' => null,
             'resolved_at' => null,
@@ -168,10 +171,11 @@ final class Store
         return $annotation;
     }
 
-    public static function updateAnnotation(string $id, array $data): array
+    public static function updateAnnotation(string $id, array $data): ?array
     {
         $all = self::readAll();
         $found = false;
+        $updated = null;
         $allowed = ['status', 'comment', 'resolved_by', 'resolved_at', 'thread'];
 
         foreach ($all as &$annotation) {
@@ -200,7 +204,7 @@ final class Store
         unset($annotation);
 
         if (! $found) {
-            abort(404, 'Annotation not found.');
+            return null;
         }
 
         self::writeAll($all);

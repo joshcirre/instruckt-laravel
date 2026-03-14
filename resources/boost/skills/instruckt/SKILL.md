@@ -25,13 +25,26 @@ When the user pastes text like this, treat it as instruckt annotations:
 # UI Feedback: /dashboard
 
 ## 1. Change the heading text
+- ID: `01JWXYZ123ABC`
 - Element: `h1.text-xl` in `pages::dashboard`
+- Source: `app/Livewire/Pages/Dashboard.php:1`
 - Classes: `text-xl font-bold`
 - Text: "Welcome"
 - Screenshot: `storage/app/_instruckt/screenshots/01JWXYZ.png`
 ```
 
-Each `##` item is one annotation. The component name (e.g. `pages::dashboard`) tells you which file to edit.
+Each `##` item is one annotation. The `ID` field is the annotation ID — use it directly with `instruckt.resolve` after fixing. The `Source` field (when available) tells you exactly which file to edit.
+
+## Source Resolution
+
+When annotations include framework context, the server automatically resolves component names to source file paths. The `framework` object in each annotation may include:
+
+- `source_file` — relative path to the component file (e.g. `app/Livewire/Dashboard.php`)
+- `source_line` — starting line number of the class
+- `render_line` — line number of the `render()` method (Livewire)
+- `class_name` — fully-qualified PHP class name (e.g. `App\Livewire\Dashboard`)
+
+Use `source_file` to open the exact file instead of searching. For Livewire components, `render_line` points to where the view is returned.
 
 ## Screenshots
 
@@ -48,5 +61,5 @@ Annotations may include a screenshot of the clicked element or a user-selected r
 ## Best Practices
 
 - **Always resolve after fixing** — without this, the marker stays visible in the user's browser
-- Call `get_all_pending` once to get all IDs, then resolve each after fixing
-- The component name tells you which file to look at — use it to navigate directly
+- The annotation ID is in the pasted markdown (the `ID` field) — use it directly with `instruckt.resolve`. No need to call `get_all_pending` first unless you need screenshots.
+- The `Source` field tells you exactly which file to edit — use it to navigate directly

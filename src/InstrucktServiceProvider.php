@@ -9,7 +9,9 @@ use Illuminate\Support\ServiceProvider;
 use Instruckt\Laravel\Components\Toolbar;
 use Instruckt\Laravel\Console\InstallCommand;
 use Instruckt\Laravel\Console\RunAgentServerCommand;
+use Instruckt\Laravel\Console\UninstallCommand;
 use Instruckt\Laravel\Http\Controllers\AnnotationController;
+use Instruckt\Laravel\Http\Middleware\TrackBladeViews;
 
 final class InstrucktServiceProvider extends ServiceProvider
 {
@@ -26,15 +28,16 @@ final class InstrucktServiceProvider extends ServiceProvider
         $this->publishAssets();
         $this->registerHttpRoutes();
         $this->registerMcpRoutes();
+        $this->registerBladeTracking();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([InstallCommand::class, RunAgentServerCommand::class]);
+            $this->commands([InstallCommand::class, RunAgentServerCommand::class, UninstallCommand::class]);
         }
     }
 
     private function registerHttpRoutes(): void
     {
-        if (! config('instruckt.enabled', true)) {
+        if (! config('instruckt.enabled', false)) {
             return;
         }
 
@@ -47,6 +50,7 @@ final class InstrucktServiceProvider extends ServiceProvider
                 Route::get('annotations', [AnnotationController::class, 'index'])->name('annotations.index');
                 Route::post('annotations', [AnnotationController::class, 'store'])->name('annotations.store');
                 Route::patch('annotations/{id}', [AnnotationController::class, 'update'])->name('annotations.update');
+                Route::post('resolve-source', [AnnotationController::class, 'resolveSource'])->name('resolve-source');
                 Route::get('screenshots/{filename}', [AnnotationController::class, 'screenshot'])->name('screenshots.show');
                 Route::post('run', [AnnotationController::class, 'run'])->name('run');
             });
@@ -54,7 +58,7 @@ final class InstrucktServiceProvider extends ServiceProvider
 
     private function registerMcpRoutes(): void
     {
-        if (! config('instruckt.enabled', true)) {
+        if (! config('instruckt.enabled', false)) {
             return;
         }
 
@@ -63,6 +67,17 @@ final class InstrucktServiceProvider extends ServiceProvider
         }
 
         $this->loadRoutesFrom(__DIR__ . '/../routes/mcp.php');
+    }
+
+    private function registerBladeTracking(): void
+    {
+        if (! config('instruckt.enabled', false)) {
+            return;
+        }
+
+        /** @var \Illuminate\Routing\Router $router */
+        $router = $this->app->make('router');
+        $router->pushMiddlewareToGroup('web', TrackBladeViews::class);
     }
 
     private function publishAssets(): void
