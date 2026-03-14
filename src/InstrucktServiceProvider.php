@@ -31,7 +31,7 @@ final class InstrucktServiceProvider extends ServiceProvider
         $this->registerBladeTracking();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([InstallCommand::class, RunAgentServerCommand::class, UninstallCommand::class]);
+            $this->commands([InstallCommand::class, UninstallCommand::class, RunAgentServerCommand::class]);
         }
     }
 
