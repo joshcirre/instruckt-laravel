@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Instruckt\Laravel\Components\Toolbar;
 use Instruckt\Laravel\Console\InstallCommand;
+use Instruckt\Laravel\Console\RunAgentServerCommand;
 use Instruckt\Laravel\Console\UninstallCommand;
 use Instruckt\Laravel\Http\Controllers\AnnotationController;
 use Instruckt\Laravel\Http\Middleware\TrackBladeViews;
@@ -30,7 +31,7 @@ final class InstrucktServiceProvider extends ServiceProvider
         $this->registerBladeTracking();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([InstallCommand::class, UninstallCommand::class]);
+            $this->commands([InstallCommand::class, UninstallCommand::class, RunAgentServerCommand::class]);
         }
     }
 
@@ -51,6 +52,7 @@ final class InstrucktServiceProvider extends ServiceProvider
                 Route::patch('annotations/{id}', [AnnotationController::class, 'update'])->name('annotations.update');
                 Route::post('resolve-source', [AnnotationController::class, 'resolveSource'])->name('resolve-source');
                 Route::get('screenshots/{filename}', [AnnotationController::class, 'screenshot'])->name('screenshots.show');
+                Route::post('run', [AnnotationController::class, 'run'])->name('run');
             });
     }
 
