@@ -1,6 +1,10 @@
 ---
 name: instruckt
-description: "Visual feedback from users via in-browser annotations. Activates when the user pastes UI feedback markdown starting with '# UI Feedback', when annotations or visual feedback are mentioned, or when you need to check for pending UI feedback via MCP."
+description: >
+  Parse in-browser annotations, locate source files, apply UI fixes, and
+  resolve markers via MCP. Activates when the user pastes UI feedback markdown
+  starting with '# UI Feedback', when annotations or visual feedback are
+  mentioned, or when you need to check for pending UI feedback via MCP.
 license: MIT
 metadata:
   author: joshcirre
