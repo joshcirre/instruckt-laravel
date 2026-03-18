@@ -18,6 +18,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Run (toolbar Run button)
+    |--------------------------------------------------------------------------
+    | Either run the agent in-process (run.command) or forward to a listener on
+    | your host (run.host_runner_url). Use the latter when the app runs in Docker.
+    |
+    | - enabled: gate the run endpoint
+    | - command: shell command; markdown is piped to stdin. Example:
+    |   cursor-agent -f --model auto -p "$(cat)"
+    | - host_runner_url: when set, POST markdown here (e.g. http://host.docker.internal:31337).
+    |   Start the listener with: php artisan instruckt:run-agent-server
+    | - agent_binary: binary used by instruckt:run-agent-server (e.g. cursor-agent)
+    | - cwd, timeout, max_markdown_length: for in-process run only
+    */
+    'run' => [
+        'enabled' => (bool) env('INSTRUCKT_RUN_ENABLED', env('APP_ENV') === 'local'),
+        'command' => env('INSTRUCKT_RUN_COMMAND', ''),
+        'host_runner_url' => env('INSTRUCKT_RUN_HOST_RUNNER_URL', ''),
+        'agent_binary' => env('INSTRUCKT_RUN_AGENT_BINARY', 'cursor-agent'),
+        'cwd' => env('INSTRUCKT_RUN_CWD', base_path()),
+        'timeout' => (int) env('INSTRUCKT_RUN_TIMEOUT', 120),
+        'max_markdown_length' => (int) env('INSTRUCKT_RUN_MAX_MARKDOWN_LENGTH', 50000),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Route prefix
     |--------------------------------------------------------------------------
     | All HTTP API routes will be registered under this prefix.
