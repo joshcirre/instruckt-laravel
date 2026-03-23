@@ -160,6 +160,11 @@ final class Store
         return null;
     }
 
+    /**
+     * @internal Used by HTTP controllers only — do not call from MCP tools.
+     *           The abort() call throws HttpResponseException which crashes
+     *           the stdio transport when app.debug is true.
+     */
     public static function getAnnotationOrFail(string $id): array
     {
         $annotation = self::getAnnotation($id);

@@ -16,25 +16,34 @@ final class ResolveTool extends Tool
 {
     public function handle(Request $request): Response
     {
-        $annotation = Store::getAnnotation($request->get('annotation_id'));
+        try {
+            $annotation = Store::getAnnotation($request->get('annotation_id'));
 
-        if (! $annotation) {
+            if (! $annotation) {
+                return Response::text(json_encode([
+                    'ok' => false,
+                    'error' => 'Annotation not found.',
+                ]));
+            }
+
+            $updated = Store::updateAnnotation($request->get('annotation_id'), [
+                'status' => 'resolved',
+                'resolved_by' => 'agent',
+                'resolved_at' => now()->toIso8601String(),
+            ]);
+
+            return Response::text(json_encode([
+                'ok' => true,
+                'annotation' => $updated,
+            ], JSON_PRETTY_PRINT));
+        } catch (\Throwable $e) {
+            report($e);
+
             return Response::text(json_encode([
                 'ok' => false,
-                'error' => 'Annotation not found.',
+                'error' => "Failed to resolve annotation: {$e->getMessage()}",
             ]));
         }
-
-        $updated = Store::updateAnnotation($request->get('annotation_id'), [
-            'status' => 'resolved',
-            'resolved_by' => 'agent',
-            'resolved_at' => now()->toIso8601String(),
-        ]);
-
-        return Response::text(json_encode([
-            'ok' => true,
-            'annotation' => $updated,
-        ], JSON_PRETTY_PRINT));
     }
 
     public function schema(JsonSchema $schema): array
