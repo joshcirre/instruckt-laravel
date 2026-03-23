@@ -39,9 +39,14 @@ final class ResolveTool extends Tool
         } catch (\Throwable $e) {
             report($e);
 
+            $errorMessage = 'Failed to resolve annotation.';
+            if (config('app.debug')) {
+                $errorMessage .= " Error: {$e->getMessage()}";
+            }
+
             return Response::text(json_encode([
                 'ok' => false,
-                'error' => "Failed to resolve annotation: {$e->getMessage()}",
+                'error' => $errorMessage,
             ]));
         }
     }

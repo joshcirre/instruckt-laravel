@@ -28,15 +28,21 @@ final class GetAllPendingTool extends Tool
             unset($a);
 
             return Response::text(json_encode([
+                'ok' => true,
                 'count' => count($annotations),
                 'annotations' => $annotations,
             ], JSON_PRETTY_PRINT));
         } catch (\Throwable $e) {
             report($e);
 
+            $errorMessage = 'Failed to get pending annotations.';
+            if (config('app.debug')) {
+                $errorMessage .= " Error: {$e->getMessage()}";
+            }
+
             return Response::text(json_encode([
                 'ok' => false,
-                'error' => "Failed to get pending annotations: {$e->getMessage()}",
+                'error' => $errorMessage,
             ]));
         }
     }

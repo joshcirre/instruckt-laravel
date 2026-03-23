@@ -11,7 +11,7 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('Get the screenshot image attached to an annotation. Returns the base64-encoded PNG image data.')]
+#[Description('Get the screenshot image attached to an annotation. Returns the base64-encoded image data (PNG or SVG).')]
 final class GetScreenshotTool extends Tool
 {
     public function handle(Request $request): Response
@@ -51,9 +51,14 @@ final class GetScreenshotTool extends Tool
         } catch (\Throwable $e) {
             report($e);
 
+            $errorMessage = 'Failed to get screenshot.';
+            if (config('app.debug')) {
+                $errorMessage .= " Error: {$e->getMessage()}";
+            }
+
             return Response::text(json_encode([
                 'ok' => false,
-                'error' => "Failed to get screenshot: {$e->getMessage()}",
+                'error' => $errorMessage,
             ]));
         }
     }
