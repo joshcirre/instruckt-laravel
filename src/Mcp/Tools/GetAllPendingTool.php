@@ -16,20 +16,35 @@ final class GetAllPendingTool extends Tool
 {
     public function handle(Request $request): Response
     {
-        $annotations = Store::getPendingAnnotations();
+        try {
+            $annotations = Store::getPendingAnnotations();
 
-        // Replace screenshot file paths with a boolean flag — agents should
-        // call get_screenshot to retrieve the actual image data.
-        foreach ($annotations as &$a) {
-            $a['has_screenshot'] = ! empty($a['screenshot']);
-            unset($a['screenshot']);
+            // Replace screenshot file paths with a boolean flag — agents should
+            // call get_screenshot to retrieve the actual image data.
+            foreach ($annotations as &$a) {
+                $a['has_screenshot'] = ! empty($a['screenshot']);
+                unset($a['screenshot']);
+            }
+            unset($a);
+
+            return Response::text(json_encode([
+                'ok' => true,
+                'count' => count($annotations),
+                'annotations' => $annotations,
+            ], JSON_PRETTY_PRINT));
+        } catch (\Throwable $e) {
+            report($e);
+
+            $errorMessage = 'Failed to get pending annotations.';
+            if (config('app.debug')) {
+                $errorMessage .= " Error: {$e->getMessage()}";
+            }
+
+            return Response::text(json_encode([
+                'ok' => false,
+                'error' => $errorMessage,
+            ]));
         }
-        unset($a);
-
-        return Response::text(json_encode([
-            'count' => count($annotations),
-            'annotations' => $annotations,
-        ], JSON_PRETTY_PRINT));
     }
 
     public function schema(JsonSchema $schema): array
