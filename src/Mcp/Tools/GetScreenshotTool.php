@@ -19,28 +19,19 @@ final class GetScreenshotTool extends Tool
         $annotation = Store::getAnnotation($request->get('annotation_id'));
 
         if (! $annotation) {
-            return Response::text(json_encode([
-                'ok' => false,
-                'error' => 'Annotation not found.',
-            ]));
+            return Response::error('Annotation not found.');
         }
 
         $screenshot = $annotation['screenshot'] ?? null;
 
         if (! $screenshot) {
-            return Response::text(json_encode([
-                'ok' => false,
-                'error' => 'No screenshot attached to this annotation.',
-            ]));
+            return Response::error('This annotation has no screenshot. Do not attempt to locate the image via other means.');
         }
 
         $path = storage_path("app/_instruckt/{$screenshot}");
 
         if (! file_exists($path)) {
-            return Response::text(json_encode([
-                'ok' => false,
-                'error' => "Screenshot file not found: {$screenshot}",
-            ]));
+            return Response::error("Screenshot file not found on disk: {$screenshot}");
         }
 
         $data = base64_encode(file_get_contents($path));

@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Instruckt\Laravel\SourceResolver;
 use Instruckt\Laravel\Store;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 
 final class AnnotationController
 {
@@ -83,14 +84,19 @@ final class AnnotationController
         return response()->json($result);
     }
 
-    public function screenshot(string $filename): BinaryFileResponse
+    public function screenshot(string $filename): BinaryFileResponse|RedirectResponse
     {
-        $path = storage_path("app/_instruckt/screenshots/{$filename}");
+        $resolved = Store::screenshotPath($filename);
 
-        abort_unless(file_exists($path), 404);
+        abort_if($resolved === null, 404);
+
+        // Remote disk (S3 etc.) — redirect to a signed temporary URL
+        if (filter_var($resolved, FILTER_VALIDATE_URL)) {
+            return redirect($resolved);
+        }
 
         $contentType = str_ends_with($filename, '.svg') ? 'image/svg+xml' : 'image/png';
 
-        return response()->file($path, ['Content-Type' => $contentType]);
+        return response()->file($resolved, ['Content-Type' => $contentType]);
     }
 }
