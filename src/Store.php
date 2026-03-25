@@ -224,7 +224,10 @@ final class Store
         }
 
         $diskPath = "_instruckt/screenshots/{$id}.{$ext}";
-        self::screenshotDisk()->put($diskPath, $binary);
+
+        if (! self::screenshotDisk()->put($diskPath, $binary)) {
+            return null;
+        }
 
         return "screenshots/{$id}.{$ext}";
     }
