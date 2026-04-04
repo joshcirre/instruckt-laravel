@@ -4,154 +4,82 @@ declare(strict_types=1);
 
 namespace Instruckt\Laravel;
 
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 final class Store
 {
-    private static function path(): string
+    // -------------------------------------------------------------------------
+    // Driver routing
+    // -------------------------------------------------------------------------
+
+    private static function useDatabase(): bool
     {
-        return storage_path('app/_instruckt/annotations.json');
+        return config('instruckt.store', 'file') === 'database';
     }
 
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    private static function readAll(): array
-    {
-        $path = self::path();
-
-        if (! file_exists($path)) {
-            return [];
-        }
-
-        $data = json_decode(file_get_contents($path), true);
-
-        return is_array($data) ? $data : [];
-    }
-
-    /**
-     * @param array<int, array<string, mixed>> $annotations
-     */
-    private static function writeAll(array $annotations): void
-    {
-        $path = self::path();
-        $dir = dirname($path);
-
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-
-        file_put_contents($path, json_encode(array_values($annotations), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n", LOCK_EX);
-    }
-
-    private static function screenshotDir(): string
-    {
-        return storage_path('app/_instruckt/screenshots');
-    }
-
-    /**
-     * Delete the screenshot file for an annotation if it exists.
-     */
-    private static function deleteScreenshot(?string $screenshotPath): void
-    {
-        if (! $screenshotPath) {
-            return;
-        }
-
-        $path = storage_path("app/_instruckt/{$screenshotPath}");
-
-        if (file_exists($path)) {
-            @unlink($path);
-        }
-    }
-
-    /**
-     * Save a data URL screenshot to disk and return the relative path.
-     */
-    private static function saveScreenshot(string $id, string $dataUrl): ?string
-    {
-        if (! str_starts_with($dataUrl, 'data:image/')) {
-            return null;
-        }
-
-        $dir = self::screenshotDir();
-
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-
-        // Determine format and extract data
-        $parts = explode(',', $dataUrl, 2);
-        $header = $parts[0] ?? '';
-        $data = $parts[1] ?? '';
-
-        if (str_contains($header, ';base64')) {
-            $binary = base64_decode($data);
-            $ext = str_contains($header, 'image/svg+xml') ? 'svg' : 'png';
-        } else {
-            // URL-encoded (e.g. SVG data URLs from snapdom)
-            $binary = urldecode($data);
-            $ext = 'svg';
-        }
-
-        if (! $binary) {
-            return null;
-        }
-
-        $filename = "{$id}.{$ext}";
-        file_put_contents("{$dir}/{$filename}", $binary);
-
-        return "screenshots/{$filename}";
-    }
+    // -------------------------------------------------------------------------
+    // Public API (driver-agnostic)
+    // -------------------------------------------------------------------------
 
     public static function createAnnotation(array $data): array
     {
         $id = (string) Str::ulid();
         $now = now()->toIso8601String();
 
-        // Save screenshot file if provided
         $screenshot = null;
         if (! empty($data['screenshot'])) {
             $screenshot = self::saveScreenshot($id, $data['screenshot']);
         }
 
-        // Enrich framework context with server-side source resolution
         $framework = SourceResolver::enrich($data['framework'] ?? null);
 
         $annotation = [
-            'id' => $id,
-            'url' => $data['url'] ?? '',
-            'x' => (float) ($data['x'] ?? 0),
-            'y' => (float) ($data['y'] ?? 0),
-            'comment' => $data['comment'] ?? '',
-            'element' => $data['element'] ?? '',
-            'element_path' => $data['element_path'] ?? '',
-            'css_classes' => $data['css_classes'] ?? null,
-            'nearby_text' => $data['nearby_text'] ?? null,
+            'id'            => $id,
+            'url'           => $data['url'] ?? '',
+            'x'             => (float) ($data['x'] ?? 0),
+            'y'             => (float) ($data['y'] ?? 0),
+            'comment'       => $data['comment'] ?? '',
+            'element'       => $data['element'] ?? '',
+            'element_path'  => $data['element_path'] ?? '',
+            'css_classes'   => $data['css_classes'] ?? null,
+            'nearby_text'   => $data['nearby_text'] ?? null,
             'selected_text' => $data['selected_text'] ?? null,
-            'bounding_box' => $data['bounding_box'] ?? null,
-            'screenshot' => $screenshot,
-            'intent' => $data['intent'] ?? 'fix',
-            'severity' => $data['severity'] ?? 'important',
-            'status' => 'pending',
-            'framework' => $framework,
-            'thread' => [],
-            'resolved_by' => null,
-            'resolved_at' => null,
-            'created_at' => $now,
-            'updated_at' => $now,
+            'bounding_box'  => $data['bounding_box'] ?? null,
+            'screenshot'    => $screenshot,
+            'intent'        => $data['intent'] ?? 'fix',
+            'severity'      => $data['severity'] ?? 'important',
+            'status'        => 'pending',
+            'framework'     => $framework,
+            'thread'        => [],
+            'resolved_by'   => null,
+            'resolved_at'   => null,
+            'created_at'    => $now,
+            'updated_at'    => $now,
         ];
 
-        $all = self::readAll();
-        $all[] = $annotation;
-        self::writeAll($all);
+        if (self::useDatabase()) {
+            self::dbInsert($annotation);
+        } else {
+            $all = self::fileReadAll();
+            $all[] = $annotation;
+            self::fileWriteAll($all);
+        }
 
         return $annotation;
     }
 
     public static function getAnnotation(string $id): ?array
     {
-        foreach (self::readAll() as $annotation) {
+        if (self::useDatabase()) {
+            $row = DB::table('instruckt_annotations')->where('id', $id)->first();
+
+            return $row ? self::dbRowToArray((array) $row) : null;
+        }
+
+        foreach (self::fileReadAll() as $annotation) {
             if ($annotation['id'] === $id) {
                 return $annotation;
             }
@@ -173,27 +101,48 @@ final class Store
 
     public static function updateAnnotation(string $id, array $data): ?array
     {
-        $all = self::readAll();
+        $allowed = ['status', 'comment', 'resolved_by', 'resolved_at', 'thread'];
+        $changes = array_intersect_key($data, array_flip($allowed));
+
+        if (self::useDatabase()) {
+            $row = DB::table('instruckt_annotations')->where('id', $id)->first();
+            if (! $row) {
+                return null;
+            }
+
+            $newStatus = $changes['status'] ?? null;
+            if (in_array($newStatus, ['resolved', 'dismissed'], true)) {
+                self::deleteScreenshot(((array) $row)['screenshot'] ?? null);
+            }
+
+            $dbChanges = [];
+            foreach ($changes as $key => $value) {
+                $dbChanges[$key] = is_array($value) ? json_encode($value) : $value;
+            }
+            $dbChanges['updated_at'] = now()->toDateTimeString();
+
+            DB::table('instruckt_annotations')->where('id', $id)->update($dbChanges);
+
+            return self::getAnnotation($id);
+        }
+
+        $all = self::fileReadAll();
         $found = false;
         $updated = null;
-        $allowed = ['status', 'comment', 'resolved_by', 'resolved_at', 'thread'];
 
         foreach ($all as &$annotation) {
             if ($annotation['id'] !== $id) {
                 continue;
             }
 
-            foreach ($data as $key => $value) {
-                if (in_array($key, $allowed, true)) {
-                    $annotation[$key] = $value;
-                }
+            foreach ($changes as $key => $value) {
+                $annotation[$key] = $value;
             }
 
             $annotation['updated_at'] = now()->toIso8601String();
             $found = true;
             $updated = $annotation;
 
-            // Clean up screenshot when annotation is resolved or dismissed
             $newStatus = $data['status'] ?? null;
             if (in_array($newStatus, ['resolved', 'dismissed'], true)) {
                 self::deleteScreenshot($annotation['screenshot'] ?? null);
@@ -207,21 +156,200 @@ final class Store
             return null;
         }
 
-        self::writeAll($all);
+        self::fileWriteAll($all);
 
         return $updated;
     }
 
     public static function allAnnotations(): array
     {
-        return self::readAll();
+        if (self::useDatabase()) {
+            return array_map(
+                fn ($row) => self::dbRowToArray((array) $row),
+                DB::table('instruckt_annotations')->orderBy('created_at')->get()->all(),
+            );
+        }
+
+        return self::fileReadAll();
     }
 
     public static function getPendingAnnotations(): array
     {
+        if (self::useDatabase()) {
+            return array_map(
+                fn ($row) => self::dbRowToArray((array) $row),
+                DB::table('instruckt_annotations')
+                    ->where('status', 'pending')
+                    ->orderBy('created_at')
+                    ->get()
+                    ->all(),
+            );
+        }
+
         return array_values(array_filter(
-            self::readAll(),
+            self::fileReadAll(),
             fn (array $a) => $a['status'] === 'pending',
         ));
+    }
+
+    // -------------------------------------------------------------------------
+    // Screenshot helpers (shared, disk-aware)
+    // -------------------------------------------------------------------------
+
+    private static function screenshotDisk(): \Illuminate\Contracts\Filesystem\Filesystem
+    {
+        return Storage::disk(config('instruckt.screenshot_disk', 'local'));
+    }
+
+    private static function saveScreenshot(string $id, string $dataUrl): ?string
+    {
+        if (! str_starts_with($dataUrl, 'data:image/')) {
+            return null;
+        }
+
+        $parts = explode(',', $dataUrl, 2);
+        $header = $parts[0] ?? '';
+        $data = $parts[1] ?? '';
+
+        if (str_contains($header, ';base64')) {
+            $binary = base64_decode($data);
+            $ext = str_contains($header, 'image/svg+xml') ? 'svg' : 'png';
+        } else {
+            $binary = urldecode($data);
+            $ext = 'svg';
+        }
+
+        if (! $binary) {
+            return null;
+        }
+
+        $diskPath = "_instruckt/screenshots/{$id}.{$ext}";
+
+        if (! self::screenshotDisk()->put($diskPath, $binary)) {
+            return null;
+        }
+
+        return "screenshots/{$id}.{$ext}";
+    }
+
+    public static function deleteScreenshot(?string $screenshotPath): void
+    {
+        if (! $screenshotPath) {
+            return;
+        }
+
+        $diskPath = "_instruckt/{$screenshotPath}";
+
+        if (self::screenshotDisk()->exists($diskPath)) {
+            self::screenshotDisk()->delete($diskPath);
+        }
+    }
+
+    /**
+     * Resolve a screenshot filename to an absolute local path or a temporary
+     * URL (for remote disks like S3). Returns null if the file does not exist.
+     */
+    public static function screenshotPath(string $filename): ?string
+    {
+        $diskPath = "_instruckt/screenshots/{$filename}";
+        $disk = self::screenshotDisk();
+
+        if (! $disk->exists($diskPath)) {
+            return null;
+        }
+
+        $diskName = config('instruckt.screenshot_disk', 'local');
+
+        if ($diskName === 'local') {
+            return $disk->path($diskPath);
+        }
+
+        return $disk->temporaryUrl($diskPath, now()->addMinutes(30));
+    }
+
+    // -------------------------------------------------------------------------
+    // File-driver internals
+    // -------------------------------------------------------------------------
+
+    private static function filePath(): string
+    {
+        return storage_path('app/_instruckt/annotations.json');
+    }
+
+    private static function fileReadAll(): array
+    {
+        $path = self::filePath();
+
+        if (! file_exists($path)) {
+            return [];
+        }
+
+        $data = json_decode(file_get_contents($path), true);
+
+        return is_array($data) ? $data : [];
+    }
+
+    private static function fileWriteAll(array $annotations): void
+    {
+        $path = self::filePath();
+        $dir = dirname($path);
+
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        file_put_contents(
+            $path,
+            json_encode(array_values($annotations), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n",
+            LOCK_EX,
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Database-driver internals
+    // -------------------------------------------------------------------------
+
+    private static function dbInsert(array $annotation): void
+    {
+        DB::table('instruckt_annotations')->insert([
+            'id'            => $annotation['id'],
+            'url'           => $annotation['url'],
+            'x'             => $annotation['x'],
+            'y'             => $annotation['y'],
+            'comment'       => $annotation['comment'],
+            'element'       => $annotation['element'],
+            'element_path'  => $annotation['element_path'],
+            'css_classes'   => $annotation['css_classes'],
+            'nearby_text'   => $annotation['nearby_text'],
+            'selected_text' => $annotation['selected_text'],
+            'bounding_box'  => isset($annotation['bounding_box']) ? json_encode($annotation['bounding_box']) : null,
+            'screenshot'    => $annotation['screenshot'],
+            'intent'        => $annotation['intent'],
+            'severity'      => $annotation['severity'],
+            'status'        => $annotation['status'],
+            'framework'     => isset($annotation['framework']) ? json_encode($annotation['framework']) : null,
+            'thread'        => json_encode($annotation['thread'] ?? []),
+            'resolved_by'   => $annotation['resolved_by'],
+            'resolved_at'   => $annotation['resolved_at'],
+            'created_at'    => now()->toDateTimeString(),
+            'updated_at'    => now()->toDateTimeString(),
+        ]);
+    }
+
+    private static function dbRowToArray(array $row): array
+    {
+        foreach (['bounding_box', 'framework', 'thread'] as $key) {
+            if (isset($row[$key]) && is_string($row[$key])) {
+                $row[$key] = json_decode($row[$key], true);
+            }
+        }
+
+        foreach (['created_at', 'updated_at', 'resolved_at'] as $key) {
+            if (! empty($row[$key])) {
+                $row[$key] = Carbon::parse($row[$key])->toIso8601String();
+            }
+        }
+
+        return $row;
     }
 }

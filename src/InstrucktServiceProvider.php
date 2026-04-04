@@ -12,6 +12,7 @@ use Instruckt\Laravel\Console\RunAgentServerCommand;
 use Instruckt\Laravel\Console\UninstallCommand;
 use Instruckt\Laravel\Http\Controllers\AnnotationController;
 use Instruckt\Laravel\Http\Middleware\TrackBladeViews;
+use Instruckt\Laravel\Http\Middleware\ValidateMcpToken;
 
 final class InstrucktServiceProvider extends ServiceProvider
 {
@@ -41,9 +42,7 @@ final class InstrucktServiceProvider extends ServiceProvider
             return;
         }
 
-        // Use 'api' middleware by default — no CSRF verification needed for this dev-tool API.
-        // Users can override via config('instruckt.middleware') if they need session/auth.
-        Route::middleware(config('instruckt.middleware', ['api']))
+        Route::middleware(config('instruckt.api_middleware', ['api']))
             ->prefix(config('instruckt.route_prefix', 'instruckt'))
             ->name('instruckt.')
             ->group(function () {
@@ -85,5 +84,9 @@ final class InstrucktServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/../config/instruckt.php' => config_path('instruckt.php'),
         ], 'instruckt-config');
+
+        $this->publishes([
+            __DIR__ . '/../database/migrations' => database_path('migrations'),
+        ], 'instruckt-migrations');
     }
 }
