@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Intervention\Image\ImageManager;
 
 final class Store
 {
@@ -223,6 +224,10 @@ final class Store
             return null;
         }
 
+        if ($ext === 'png') {
+            $binary = self::padScreenshot($binary);
+        }
+
         $diskPath = "_instruckt/screenshots/{$id}.{$ext}";
 
         if (! self::screenshotDisk()->put($diskPath, $binary)) {
@@ -230,6 +235,43 @@ final class Store
         }
 
         return "screenshots/{$id}.{$ext}";
+    }
+
+    /**
+     * Pad a PNG screenshot with transparency so it satisfies Claude Code's
+     * image constraints: minimum 200x200, max 2:1 aspect ratio. Thin/tall
+     * captures otherwise trip up vision processing.
+     */
+    private static function padScreenshot(string $binary): string
+    {
+        if (strlen($binary) > 10 * 1024 * 1024) {
+            return $binary;
+        }
+
+        try {
+            $image = ImageManager::gd()->read($binary);
+        } catch (\Throwable) {
+            return $binary;
+        }
+
+        $w = $image->width();
+        $h = $image->height();
+
+        $minDim = 200;
+        $maxRatio = 2;
+
+        $targetW = max($w, $minDim, (int) ceil($h / $maxRatio));
+        $targetH = max($h, $minDim, (int) ceil($w / $maxRatio));
+
+        if ($targetW === $w && $targetH === $h) {
+            return $binary;
+        }
+
+        $canvas = ImageManager::gd()->create($targetW, $targetH)
+            ->fill('rgba(0, 0, 0, 0)')
+            ->place($image, 'center');
+
+        return (string) $canvas->toPng();
     }
 
     public static function deleteScreenshot(?string $screenshotPath): void
