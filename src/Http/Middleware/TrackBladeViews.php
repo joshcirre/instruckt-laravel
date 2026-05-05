@@ -7,6 +7,7 @@ namespace Instruckt\Laravel\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -29,7 +30,7 @@ final class TrackBladeViews
         }
 
         // Skip non-HTML requests
-        if ($request->expectsJson() || $request->is(config('instruckt.route_prefix', 'instruckt') . '/*')) {
+        if ($request->expectsJson() || $request->is(config('instruckt.route_prefix', 'instruckt').'/*')) {
             return $next($request);
         }
 
@@ -42,10 +43,10 @@ final class TrackBladeViews
 
     private function trackViews(): void
     {
-        $basePath = base_path() . '/';
+        $basePath = base_path().'/';
 
         Event::listen('composing:*', function (string $event, array $data) use ($basePath) {
-            /** @var \Illuminate\View\View $view */
+            /** @var View $view */
             $view = $data[0];
             $path = $view->getPath();
 
@@ -91,9 +92,9 @@ final class TrackBladeViews
         }
 
         $json = json_encode($unique, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG);
-        $script = '<script type="application/json" id="instruckt-views">' . $json . '</script>';
+        $script = '<script type="application/json" id="instruckt-views">'.$json.'</script>';
 
-        $response->setContent(str_replace('</body>', $script . "\n</body>", $content));
+        $response->setContent(str_replace('</body>', $script."\n</body>", $content));
 
         return $response;
     }

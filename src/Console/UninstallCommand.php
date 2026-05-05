@@ -243,7 +243,7 @@ final class UninstallCommand extends Command
                         return false;
                     }
 
-                    if (str_contains($trimmed, "virtual:instruckt")) {
+                    if (str_contains($trimmed, 'virtual:instruckt')) {
                         return false;
                     }
 
@@ -257,7 +257,7 @@ final class UninstallCommand extends Command
                 $cleaned = implode("\n", $filtered);
             }
 
-            $cleaned = rtrim($cleaned) . "\n";
+            $cleaned = rtrim($cleaned)."\n";
 
             File::put($appPath, $cleaned);
             $this->components->twoColumnDetail($relative, '<fg=red>cleaned</>');
@@ -321,7 +321,7 @@ final class UninstallCommand extends Command
                 File::delete($fullPath);
                 $this->components->twoColumnDetail("{$path} ({$name})", '<fg=red>removed</>');
             } else {
-                File::put($fullPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+                File::put($fullPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
                 $this->components->twoColumnDetail("{$path} ({$name})", '<fg=red>cleaned</>');
             }
         }
@@ -477,7 +477,7 @@ final class UninstallCommand extends Command
             }
 
             foreach ($layoutNames as $name) {
-                $path = $dir . '/' . $name;
+                $path = $dir.'/'.$name;
 
                 if (File::exists($path)) {
                     $layouts[] = $path;
@@ -490,6 +490,6 @@ final class UninstallCommand extends Command
 
     private function relative(string $path): string
     {
-        return str_replace(base_path() . '/', '', $path);
+        return str_replace(base_path().'/', '', $path);
     }
 }

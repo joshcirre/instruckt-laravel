@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Instruckt\Laravel\Components;
 
+use Illuminate\Contracts\View\View;
 use Illuminate\View\Component;
 
 final class Toolbar extends Component
@@ -75,7 +76,7 @@ final class Toolbar extends Component
         return "https://unpkg.com/instruckt@{$version}/dist/instruckt.iife.js";
     }
 
-    public function render(): \Illuminate\Contracts\View\View
+    public function render(): View
     {
         return view('instruckt::components.toolbar');
     }

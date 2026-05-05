@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Instruckt\Laravel;
 
 use Carbon\Carbon;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Intervention\Image\ImageManager;
 
 final class Store
 {
@@ -37,27 +39,27 @@ final class Store
         $framework = SourceResolver::enrich($data['framework'] ?? null);
 
         $annotation = [
-            'id'            => $id,
-            'url'           => $data['url'] ?? '',
-            'x'             => (float) ($data['x'] ?? 0),
-            'y'             => (float) ($data['y'] ?? 0),
-            'comment'       => $data['comment'] ?? '',
-            'element'       => $data['element'] ?? '',
-            'element_path'  => $data['element_path'] ?? '',
-            'css_classes'   => $data['css_classes'] ?? null,
-            'nearby_text'   => $data['nearby_text'] ?? null,
+            'id' => $id,
+            'url' => $data['url'] ?? '',
+            'x' => (float) ($data['x'] ?? 0),
+            'y' => (float) ($data['y'] ?? 0),
+            'comment' => $data['comment'] ?? '',
+            'element' => $data['element'] ?? '',
+            'element_path' => $data['element_path'] ?? '',
+            'css_classes' => $data['css_classes'] ?? null,
+            'nearby_text' => $data['nearby_text'] ?? null,
             'selected_text' => $data['selected_text'] ?? null,
-            'bounding_box'  => $data['bounding_box'] ?? null,
-            'screenshot'    => $screenshot,
-            'intent'        => $data['intent'] ?? 'fix',
-            'severity'      => $data['severity'] ?? 'important',
-            'status'        => 'pending',
-            'framework'     => $framework,
-            'thread'        => [],
-            'resolved_by'   => null,
-            'resolved_at'   => null,
-            'created_at'    => $now,
-            'updated_at'    => $now,
+            'bounding_box' => $data['bounding_box'] ?? null,
+            'screenshot' => $screenshot,
+            'intent' => $data['intent'] ?? 'fix',
+            'severity' => $data['severity'] ?? 'important',
+            'status' => 'pending',
+            'framework' => $framework,
+            'thread' => [],
+            'resolved_by' => null,
+            'resolved_at' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
         ];
 
         if (self::useDatabase()) {
@@ -196,7 +198,7 @@ final class Store
     // Screenshot helpers (shared, disk-aware)
     // -------------------------------------------------------------------------
 
-    private static function screenshotDisk(): \Illuminate\Contracts\Filesystem\Filesystem
+    private static function screenshotDisk(): Filesystem
     {
         return Storage::disk(config('instruckt.screenshot_disk', 'local'));
     }
@@ -223,6 +225,10 @@ final class Store
             return null;
         }
 
+        if ($ext === 'png') {
+            $binary = self::padScreenshot($binary);
+        }
+
         $diskPath = "_instruckt/screenshots/{$id}.{$ext}";
 
         if (! self::screenshotDisk()->put($diskPath, $binary)) {
@@ -230,6 +236,43 @@ final class Store
         }
 
         return "screenshots/{$id}.{$ext}";
+    }
+
+    /**
+     * Pad a PNG screenshot with transparency so it satisfies Claude Code's
+     * image constraints: minimum 200x200, max 2:1 aspect ratio. Thin/tall
+     * captures otherwise trip up vision processing.
+     */
+    private static function padScreenshot(string $binary): string
+    {
+        if (strlen($binary) > 10 * 1024 * 1024) {
+            return $binary;
+        }
+
+        try {
+            $image = ImageManager::gd()->read($binary);
+        } catch (\Throwable) {
+            return $binary;
+        }
+
+        $w = $image->width();
+        $h = $image->height();
+
+        $minDim = 200;
+        $maxRatio = 2;
+
+        $targetW = max($w, $minDim, (int) ceil($h / $maxRatio));
+        $targetH = max($h, $minDim, (int) ceil($w / $maxRatio));
+
+        if ($targetW === $w && $targetH === $h) {
+            return $binary;
+        }
+
+        $canvas = ImageManager::gd()->create($targetW, $targetH)
+            ->fill('rgba(0, 0, 0, 0)')
+            ->place($image, 'center');
+
+        return (string) $canvas->toPng();
     }
 
     public static function deleteScreenshot(?string $screenshotPath): void
@@ -300,7 +343,7 @@ final class Store
 
         file_put_contents(
             $path,
-            json_encode(array_values($annotations), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n",
+            json_encode(array_values($annotations), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n",
             LOCK_EX,
         );
     }
@@ -312,27 +355,27 @@ final class Store
     private static function dbInsert(array $annotation): void
     {
         DB::table('instruckt_annotations')->insert([
-            'id'            => $annotation['id'],
-            'url'           => $annotation['url'],
-            'x'             => $annotation['x'],
-            'y'             => $annotation['y'],
-            'comment'       => $annotation['comment'],
-            'element'       => $annotation['element'],
-            'element_path'  => $annotation['element_path'],
-            'css_classes'   => $annotation['css_classes'],
-            'nearby_text'   => $annotation['nearby_text'],
+            'id' => $annotation['id'],
+            'url' => $annotation['url'],
+            'x' => $annotation['x'],
+            'y' => $annotation['y'],
+            'comment' => $annotation['comment'],
+            'element' => $annotation['element'],
+            'element_path' => $annotation['element_path'],
+            'css_classes' => $annotation['css_classes'],
+            'nearby_text' => $annotation['nearby_text'],
             'selected_text' => $annotation['selected_text'],
-            'bounding_box'  => isset($annotation['bounding_box']) ? json_encode($annotation['bounding_box']) : null,
-            'screenshot'    => $annotation['screenshot'],
-            'intent'        => $annotation['intent'],
-            'severity'      => $annotation['severity'],
-            'status'        => $annotation['status'],
-            'framework'     => isset($annotation['framework']) ? json_encode($annotation['framework']) : null,
-            'thread'        => json_encode($annotation['thread'] ?? []),
-            'resolved_by'   => $annotation['resolved_by'],
-            'resolved_at'   => $annotation['resolved_at'],
-            'created_at'    => now()->toDateTimeString(),
-            'updated_at'    => now()->toDateTimeString(),
+            'bounding_box' => isset($annotation['bounding_box']) ? json_encode($annotation['bounding_box']) : null,
+            'screenshot' => $annotation['screenshot'],
+            'intent' => $annotation['intent'],
+            'severity' => $annotation['severity'],
+            'status' => $annotation['status'],
+            'framework' => isset($annotation['framework']) ? json_encode($annotation['framework']) : null,
+            'thread' => json_encode($annotation['thread'] ?? []),
+            'resolved_by' => $annotation['resolved_by'],
+            'resolved_at' => $annotation['resolved_at'],
+            'created_at' => now()->toDateTimeString(),
+            'updated_at' => now()->toDateTimeString(),
         ]);
     }
 

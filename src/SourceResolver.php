@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Instruckt\Laravel;
 
+use Livewire\Factory\Factory;
 use ReflectionClass;
 
 final class SourceResolver
@@ -78,7 +79,7 @@ final class SourceResolver
         // Livewire v3+ uses a Factory bound as 'livewire.factory'
         if (app()->bound('livewire.factory')) {
             try {
-                /** @var \Livewire\Factory\Factory $factory */
+                /** @var Factory $factory */
                 $factory = app('livewire.factory');
 
                 return $factory->resolveComponentClass($name);
@@ -124,7 +125,7 @@ final class SourceResolver
      */
     private static function relativePath(string $absolutePath): string
     {
-        $base = base_path() . '/';
+        $base = base_path().'/';
 
         if (str_starts_with($absolutePath, $base)) {
             return substr($absolutePath, strlen($base));

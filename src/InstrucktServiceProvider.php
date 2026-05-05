@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Instruckt\Laravel;
 
+use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Instruckt\Laravel\Components\Toolbar;
@@ -11,18 +12,18 @@ use Instruckt\Laravel\Console\InstallCommand;
 use Instruckt\Laravel\Console\UninstallCommand;
 use Instruckt\Laravel\Http\Controllers\AnnotationController;
 use Instruckt\Laravel\Http\Middleware\TrackBladeViews;
-use Instruckt\Laravel\Http\Middleware\ValidateMcpToken;
+use Laravel\Mcp\Facades\Mcp;
 
 final class InstrucktServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__ . '/../config/instruckt.php', 'instruckt');
+        $this->mergeConfigFrom(__DIR__.'/../config/instruckt.php', 'instruckt');
     }
 
     public function boot(): void
     {
-        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'instruckt');
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'instruckt');
         $this->loadViewComponentsAs('instruckt', [Toolbar::class]);
 
         $this->publishAssets();
@@ -59,11 +60,11 @@ final class InstrucktServiceProvider extends ServiceProvider
             return;
         }
 
-        if (! class_exists(\Laravel\Mcp\Facades\Mcp::class)) {
+        if (! class_exists(Mcp::class)) {
             return;
         }
 
-        $this->loadRoutesFrom(__DIR__ . '/../routes/mcp.php');
+        $this->loadRoutesFrom(__DIR__.'/../routes/mcp.php');
     }
 
     private function registerBladeTracking(): void
@@ -72,7 +73,7 @@ final class InstrucktServiceProvider extends ServiceProvider
             return;
         }
 
-        /** @var \Illuminate\Routing\Router $router */
+        /** @var Router $router */
         $router = $this->app->make('router');
         $router->pushMiddlewareToGroup('web', TrackBladeViews::class);
     }
@@ -80,11 +81,11 @@ final class InstrucktServiceProvider extends ServiceProvider
     private function publishAssets(): void
     {
         $this->publishes([
-            __DIR__ . '/../config/instruckt.php' => config_path('instruckt.php'),
+            __DIR__.'/../config/instruckt.php' => config_path('instruckt.php'),
         ], 'instruckt-config');
 
         $this->publishes([
-            __DIR__ . '/../database/migrations' => database_path('migrations'),
+            __DIR__.'/../database/migrations' => database_path('migrations'),
         ], 'instruckt-migrations');
     }
 }
